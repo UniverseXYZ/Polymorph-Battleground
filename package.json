@@ -1,0 +1,32 @@
+{
+  "name": "polymorph-battleground",
+  "version": "1.0",
+  "description": "Polymorph Battleground for Universe.xyz",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "deploy": "npx hardhat deploy --network",
+    "etherscan-verify": "npx hardhat verify --network",
+    "test": "npx hardhat test",
+    "export": "npx hardhat deploy --export-all ./deployments/contracts.json"
+  },
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.0.2",
+    "@nomiclabs/hardhat-etherscan": "^2.1.1",
+    "@nomiclabs/hardhat-waffle": "^2.0.1",
+    "ethereum-waffle": "^3.3.0",
+    "ethers": "^5.0.32",
+    "hardhat": "^2.1.1",
+    "hardhat-contract-sizer": "^2.0.3",
+    "hardhat-deploy": "^0.7.5",
+    "hardhat-gas-reporter": "^1.0.4"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.2.0",
+    "chai": "^4.3.4",
+    "ganache-cli": "^6.12.2",
+    "prettier": "^2.3.2",
+    "prettier-plugin-solidity": "^1.0.0-beta.14",
+    "solhint": "^3.3.6",
+    "solidity-coverage": "^0.7.16"
+  }
+}
