@@ -1,3 +1,4 @@
+require('dotenvrc');
 const { deployments, hardhatArguments } = require("hardhat");
 
 module.exports = async function () {
@@ -15,7 +16,7 @@ module.exports = async function () {
 
       const polymorphBattlegroundDeployment = await deployments.deploy("PolymorphBattleground", {
         from: namedAccounts.deployer,
-        args: [],
+        args: [process.env.POLYMORPHS_CONTRACT_ADDRESS],
       });
 
       console.log("PolymorphBattleground deployed to:", polymorphBattlegroundDeployment.address);

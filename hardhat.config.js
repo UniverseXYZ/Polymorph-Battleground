@@ -1,3 +1,4 @@
+require('dotenvrc');
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-etherscan");
 require("solidity-coverage");
