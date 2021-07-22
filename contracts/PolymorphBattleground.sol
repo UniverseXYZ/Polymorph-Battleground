@@ -28,6 +28,7 @@ contract PolymorphBattleground is PolymorphGeneParser {
     constructor(address contractAddress) {
         //TODO:: pass DAO collection fees Address !
         //TODO:: Implement supported ERC20 tokens mapping and allow to use tokens only from this list
+        //TODO:: Add events
         polymorphsContractAddress = contractAddress;
     }
 
@@ -48,8 +49,8 @@ contract PolymorphBattleground is PolymorphGeneParser {
         BattleEntitiy memory entitiy = BattleEntitiy({
             id: polymorphId,
             registered: true,
-            attack: getAttack(polymorphId),
-            defence: getDefence(polymorphId),
+            attack: getStatsPoints(polymorphId),
+            defence: getStatsPoints(polymorphId),
             skillType: skillType,
             owner: msg.sender
             });
@@ -65,22 +66,12 @@ contract PolymorphBattleground is PolymorphGeneParser {
 
     /// @notice Calculates the attack score of the polymorph based on its gene
     /// @param polymorphId Id of the polymorph
-    function getAttack(uint256 polymorphId) public view returns (uint256) {
+    function getStatsPoints(uint256 polymorphId) public view returns (uint256) {
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         uint256 gene = polymorphsContract.geneOf(polymorphId);
         require(gene != 0, "Cannot calculate attack points for no Gene");
-        uint256 attack = parseAttack(gene);
+        uint256 attack = getStats(gene);
         return attack;
-    }
-
-    /// @notice Calculates the defence score of the polymorph based on its gene
-    /// @param polymorphId Id of the polymorph
-    function getDefence(uint256 polymorphId) public view returns (uint256) {
-        PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
-        uint256 gene = polymorphsContract.geneOf(polymorphId);
-        require(gene != 0, "Cannot calculate defence points for no Gene");
-        uint256 defence = parseDefence(gene);
-        return defence;
     }
 
     /// @notice The actual battle calculation where the comparison happens

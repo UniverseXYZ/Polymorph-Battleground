@@ -4,7 +4,20 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "hardhat/console.sol";
 
 contract PolymorphGeneParser {
+    // TODO:: refactor to library
     using SafeMath for uint256;
+
+    enum GenePairsIndexes {
+        CHARACTER,
+        BACKGROUND,
+        PANTS,
+        TORSO,
+        FOOTWEAR,
+        EYEWEAR,
+        HEAD,
+        WEAPON_RIGHT,
+        WEAPON_LEFT
+    }
 
     struct Item {
         uint256 min;
@@ -25,17 +38,7 @@ contract PolymorphGeneParser {
     mapping(string => uint256) private itemsCountByTypeMap;
 
     constructor() {
-        initFootwearMap();
-        initCharacterMap();
-        initPantsMap();
-        initTorsoMap();
-        initEyewearMap();
-        initHeadMap();
-        initWeaponRightMap();
-        initWeaponLeftMap();
-        initBackgroundMap();
-        initGeneIndexByGeneTypeMap();
-        initItemsCountByTypeMap();
+        initMappings();
     }
 
     function splitGeneToPairs(uint256 _i) public pure returns (uint256[] memory){
@@ -51,50 +54,30 @@ contract PolymorphGeneParser {
         return genePairs;
     }
 
-    function parseAttack(uint256 gene) internal view returns (uint256) { // removed pure
+    function getStats(uint256 gene) internal view returns (uint256) { // removed pure
         uint256 genePositions = 9; // each position is 2 digits so its 18 in total
         uint256 genes = gene.mod(10**(genePositions * 2)); // => 061151489786639768
         uint256[] memory genePairs = splitGeneToPairs(genes);
 
-        Item memory character = getCharacterItem(genePairs);
-        Item memory background = getBackgroundItem(genePairs);
-        Item memory pants = getPantsItem(genePairs);
-        Item memory torso = getTorsoItem(genePairs);
-        Item memory footWear = getFootWearItem(genePairs);
-        Item memory eyeWear = getEyeWearItem(genePairs);
-        Item memory head = getHeadItem(genePairs);
-        Item memory weaponRight = getWeaponRightItem(genePairs);
-        Item memory weaponLeft = getWeaponLeftItem(genePairs);
+        Item memory character = getItem(genePairs, "CHARACTER");
+        // Item memory background = getItem(genePairs, "BACKGROUND");
+        Item memory pants = getItem(genePairs, "PANTS");
+        Item memory torso = getItem(genePairs, "TORSO");
+        Item memory footWear = getItem(genePairs, "FOOTWEAR");
+        Item memory eyeWear = getItem(genePairs, "EYEWEAR");
+        Item memory head = getItem(genePairs, "HEAD");
+        Item memory weaponRight = getItem(genePairs, "WEAPON_RIGHT");
+        Item memory weaponLeft = getItem(genePairs, "WEAPON_LEFT");
 
         // TODO:: adjust the formula
         // TODO:: use Oracle randomness
-        uint256 attack = character.max + background.max + pants.max + torso.max + footWear.max + eyeWear.max + head.max + weaponRight.max + weaponLeft.max;
+        uint256 attack = character.max + pants.max + torso.max + footWear.max + eyeWear.max + head.max + weaponRight.max + weaponLeft.max;
         return attack;
     }
 
-    function parseDefence(uint256 gene) internal view returns (uint256) {
-        uint256 genePositions = 9; // each position is 2 digits so its 18 in total
-        uint256 genes = gene.mod(10**(genePositions * 2)); // => 061151489786639768
-        uint256[] memory genePairs = splitGeneToPairs(genes);
-
-        Item memory character = getCharacterItem(genePairs);
-        Item memory background = getBackgroundItem(genePairs);
-        Item memory pants = getPantsItem(genePairs);
-        Item memory torso = getTorsoItem(genePairs);
-        Item memory footWear = getFootWearItem(genePairs);
-        Item memory eyeWear = getEyeWearItem(genePairs);
-        Item memory head = getHeadItem(genePairs);
-        Item memory weaponRight = getWeaponRightItem(genePairs);
-        Item memory weaponLeft = getWeaponLeftItem(genePairs);
-
-        // TODO:: adjust the formula
-        // TODO:: use Oracle randomness
-        uint256 defence = character.max + background.max + pants.max + torso.max + footWear.max + eyeWear.max + head.max + weaponRight.max + weaponLeft.max;
-        return defence;
-    }
-
     // Initializers
-    function initFootwearMap() internal {
+    function initMappings() internal {
+        // Footwear
         footwearMap[0] = Item(0, 5, "No shoes");
         footwearMap[1] = Item(0, 5, "Amish Shoes");
         footwearMap[2] = Item(0, 5, "Astronaut Footwear");
@@ -120,9 +103,8 @@ contract PolymorphGeneParser {
         footwearMap[22] = Item(0, 5, "Sushi Chef Shoes");
         footwearMap[23] = Item(0, 5, "Tennis Socks & Shoes");
         footwearMap[24] = Item(0, 5, "White-Yellow Football Cleats");
-    }
 
-    function initCharacterMap() internal {
+        // Character
         characterMap[0] = Item(0, 0, "Diamond Paws");
         characterMap[1] = Item(0, 0, "Escrow");
         characterMap[2] = Item(0, 0, "Frankie");
@@ -134,9 +116,8 @@ contract PolymorphGeneParser {
         characterMap[8] = Item(0, 0, "Vitalik");
         characterMap[9] = Item(0, 0, "Ragnar");
         characterMap[1] = Item(0, 0, "X-YZ");
-    }
 
-    function initPantsMap() internal {
+        // Pants
         pantsMap[0] = Item(0, 5, "Underwear");
         pantsMap[1] = Item(0, 5, "Amish Pants");
         pantsMap[2] = Item(0, 5, "Argentina Pants");
@@ -170,9 +151,8 @@ contract PolymorphGeneParser {
         pantsMap[30] = Item(0, 5, "Taekwondo Pants");
         pantsMap[31] = Item(0, 5, "Tennis Pants");
         pantsMap[32] = Item(0, 5, "Tuxedo Pants");
-    }
 
-    function initTorsoMap() internal {
+        // TORSO
         torsoMap[0] = Item(0, 5, "No Torso");
         torsoMap[1] = Item(0, 5, "Amish Shirt");
         torsoMap[2] = Item(0, 5, "Argentina Jersey");
@@ -207,9 +187,8 @@ contract PolymorphGeneParser {
         torsoMap[31] = Item(0, 5, "Tuxedo Jacket");
         torsoMap[32] = Item(0, 5, "Weed Plant Tshirt");
         torsoMap[33] = Item(0, 5, "White Football Jersey");
-    }
 
-    function initEyewearMap() internal {
+        // Eyewear
         eyewearMap[0] = Item(0, 5, "No Eyewear");
         eyewearMap[1] = Item(0, 5, "3D Glasses");
         eyewearMap[2] = Item(0, 5, "Bar Shades");
@@ -223,9 +202,8 @@ contract PolymorphGeneParser {
         eyewearMap[10] = Item(0, 5, "Round Glasses");
         eyewearMap[11] = Item(0, 5, "Sunglasses");
         eyewearMap[12] = Item(0, 5, "VR Set");
-    }
 
-    function initHeadMap() internal {
+        // HEAD
         headMap[0] = Item(0, 5, "No Headwear");
         headMap[1] = Item(0, 5, "Amish Hat");
         headMap[2] = Item(0, 5, "Astronnaut Helmet");
@@ -257,9 +235,8 @@ contract PolymorphGeneParser {
         headMap[28] = Item(0, 5, "Traffic Cone");
         headMap[29] = Item(0, 5, "Tuxedo Hat");
         headMap[30] = Item(0, 5, "Violet Beanie");
-    }
 
-    function initWeaponRightMap() internal {
+        // weapon right
         weaponRightMap[0] = Item(0, 5, "No Right Hand Accesories");
         weaponRightMap[1] = Item(0, 5, "American Football");
         weaponRightMap[2] = Item(0, 5, "Amish Pitch Fork");
@@ -292,9 +269,8 @@ contract PolymorphGeneParser {
         weaponRightMap[29] = Item(0, 5, "Sushi Knife");
         weaponRightMap[30] = Item(0, 5, "Sword");
         weaponRightMap[31] = Item(0, 5, "Tennis Racket");
-    }
 
-    function initWeaponLeftMap() internal {
+        // weapon left
         weaponLeftMap[0] = Item(0, 5, "No Left Hand Accesories");
         weaponLeftMap[1] = Item(0, 5, "American Football");
         weaponLeftMap[2] = Item(0, 5, "Amish Pitch Fork");
@@ -327,9 +303,8 @@ contract PolymorphGeneParser {
         weaponLeftMap[29] = Item(0, 5, "Sushi Knife");
         weaponLeftMap[30] = Item(0, 5, "Sword");
         weaponLeftMap[31] = Item(0, 5, "Tennis Racket");
-    }
 
-    function initBackgroundMap() internal {
+        // Background
         backgroundMap[0] = Item(0, 5, "Angel Tears");
         backgroundMap[1] = Item(0, 5, "Aqua Splash");
         backgroundMap[2] = Item(0, 5, "Crimson Blush");
@@ -342,9 +317,8 @@ contract PolymorphGeneParser {
         backgroundMap[9] = Item(0, 5, "Squeaky Clean");
         backgroundMap[10] = Item(0, 5, "Strong Bliss");
         backgroundMap[11] = Item(0, 5, "Summer Salad");
-    }
 
-    function initGeneIndexByGeneTypeMap() internal {
+        // geneIndexByGeneTypeMap
         geneIndexByGeneTypeMap["CHARACTER"] = 0;
         geneIndexByGeneTypeMap["BACKGROUND"] = 1;
         geneIndexByGeneTypeMap["PANTS"] = 2;
@@ -354,9 +328,8 @@ contract PolymorphGeneParser {
         geneIndexByGeneTypeMap["HEAD"] = 6;
         geneIndexByGeneTypeMap["WEAPON_RIGHT"] = 7;
         geneIndexByGeneTypeMap["WEAPON_LEFT"] = 8;
-    }
 
-    function initItemsCountByTypeMap() internal {
+        // itemsCountByTypeMap
         itemsCountByTypeMap["CHARACTER"] = 11;
         itemsCountByTypeMap["BACKGROUND"] = 12;
         itemsCountByTypeMap["PANTS"] =  33;
@@ -369,66 +342,21 @@ contract PolymorphGeneParser {
     }
 
     // Getters
-    function getCharacterItem(uint256[] memory genePairs) internal view returns (Item memory) {
-        uint256 gene = genePairs[geneIndexByGeneTypeMap["CHARACTER"]];
-        uint256 itemIndex = gene % itemsCountByTypeMap["CHARACTER"];
-        Item memory item = characterMap[itemIndex];
-        return item;
-    }
+    function getItem(uint256[] memory genePairs, string memory geneType) internal view returns (Item memory) {
+        uint256 gene = genePairs[geneIndexByGeneTypeMap[geneType]];
+        uint256 itemIndex = gene % itemsCountByTypeMap[geneType];
 
-    function getBackgroundItem(uint256[] memory genePairs) internal view returns (Item memory) {
-        uint256 gene = genePairs[geneIndexByGeneTypeMap["BACKGROUND"]];
-        uint256 itemIndex = gene % itemsCountByTypeMap["BACKGROUND"];
-        Item memory item = backgroundMap[itemIndex];
-        return item;
-    }
+        Item memory item;
+        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.CHARACTER)) item = characterMap[itemIndex];
+        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.BACKGROUND)) item = backgroundMap[itemIndex];
+        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.PANTS)) item = pantsMap[itemIndex];
+        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.TORSO)) item = torsoMap[itemIndex];
+        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.FOOTWEAR)) item = footwearMap[itemIndex];
+        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.EYEWEAR)) item = eyewearMap[itemIndex];
+        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.HEAD)) item = headMap[itemIndex];
+        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.WEAPON_RIGHT)) item = weaponRightMap[itemIndex];
+        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.WEAPON_LEFT)) item = weaponLeftMap[itemIndex];
 
-    function getPantsItem(uint256[] memory genePairs) internal view returns (Item memory) {
-        uint256 gene = genePairs[geneIndexByGeneTypeMap["PANTS"]];
-        uint256 itemIndex = gene % itemsCountByTypeMap["PANTS"];
-        Item memory item = pantsMap[itemIndex];
-        return item;
-    }
-
-    function getTorsoItem(uint256[] memory genePairs) internal view returns (Item memory) {
-        uint256 gene = genePairs[geneIndexByGeneTypeMap["TORSO"]];
-        uint256 itemIndex = gene % itemsCountByTypeMap["TORSO"];
-        Item memory item = torsoMap[itemIndex];
-        return item;
-    }
-
-    function getFootWearItem(uint256[] memory genePairs) internal view returns (Item memory) {
-        uint256 gene = genePairs[geneIndexByGeneTypeMap["FOOTWEAR"]];
-        uint256 itemIndex = gene % itemsCountByTypeMap["FOOTWEAR"];
-        Item memory item = footwearMap[itemIndex];
-        return item;
-    }
-
-    function getEyeWearItem(uint256[] memory genePairs) internal view returns (Item memory) {
-        uint256 gene = genePairs[geneIndexByGeneTypeMap["EYEWEAR"]];
-        uint256 itemIndex = gene % itemsCountByTypeMap["EYEWEAR"];
-        Item memory item = eyewearMap[itemIndex];
-        return item;
-    }
-
-    function getHeadItem(uint256[] memory genePairs) internal view returns (Item memory) {
-        uint256 gene = genePairs[geneIndexByGeneTypeMap["HEAD"]];
-        uint256 itemIndex = gene % itemsCountByTypeMap["HEAD"];
-        Item memory item = headMap[itemIndex];
-        return item;
-    }
-
-    function getWeaponLeftItem(uint256[] memory genePairs) internal view returns (Item memory) {
-        uint256 gene = genePairs[geneIndexByGeneTypeMap["WEAPON_LEFT"]];
-        uint256 itemIndex = gene % itemsCountByTypeMap["WEAPON_LEFT"];
-        Item memory item = weaponLeftMap[itemIndex];
-        return item;
-    }
-
-    function getWeaponRightItem(uint256[] memory genePairs) internal view returns (Item memory) {
-        uint256 gene = genePairs[geneIndexByGeneTypeMap["WEAPON_RIGHT"]];
-        uint256 itemIndex = gene % itemsCountByTypeMap["WEAPON_RIGHT"];
-        Item memory item = weaponRightMap[itemIndex];
         return item;
     }
 
