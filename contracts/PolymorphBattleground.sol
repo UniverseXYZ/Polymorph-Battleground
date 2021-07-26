@@ -3,9 +3,15 @@ pragma solidity ^0.8.0;
 
 import "./PolymorphWithGeneChanger.sol";
 import "./PolymorphGeneParser.sol";
+import "./IUniswapV3Router.sol";
 
 contract PolymorphBattleground is PolymorphGeneParser {
     address public polymorphsContractAddress;
+    address payable public daoAddress;
+    address private linkAddress;
+    address private wethAddress;
+    address private xyzAddress;
+    IUniswapV3Router private uniswapV3Router;
 
     enum BattleStances {
         ATTACK,
@@ -25,11 +31,19 @@ contract PolymorphBattleground is PolymorphGeneParser {
     uint256 private enterFee = 0.1 ether;
     uint256 public battlePoolLength = 0;
 
-    constructor(address contractAddress) {
-        //TODO:: pass DAO collection fees Address !
-        //TODO:: Implement supported ERC20 tokens mapping and allow to use tokens only from this list
+    modifier onlyDAO() {
+        require(msg.sender == daoAddress, "Not called from the dao");
+        _;
+    }
+
+    constructor(address contractAddress, address payable _daoAddress, address _uniswapV3Router, address _linkAddress, address _wethAddress, address _xyzAddress) {
         //TODO:: Add events
         polymorphsContractAddress = contractAddress;
+        daoAddress = _daoAddress;
+        linkAddress = _linkAddress;
+        wethAddress = _wethAddress;
+        xyzAddress = _xyzAddress;
+        uniswapV3Router = IUniswapV3Router(_uniswapV3Router);
     }
 
     /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the pool.
@@ -89,8 +103,39 @@ contract PolymorphBattleground is PolymorphGeneParser {
         view
     {}
 
-    /// @notice Deducts a portion from the wager and converts it to LINK, so costs can be coverd for RNG generation
-    function getLinkForRNGCosts() internal {}
+    /// @notice converts it to LINK, so costs can be coverd for RNG generation
+    /// @param linkAmount Exact LINK(Chainlink) amount to swap
+    function getLinkForRNGCosts(uint256 linkAmount) public payable {
+        require(msg.value > 0, "Must pass non 0 ETH amount");
+        require(linkAmount > 0, "Must pass non 0 LINK amount");
+        
+        uint256 deadline = block.timestamp + 60;
+        address tokenIn = wethAddress;
+        address tokenOut = linkAddress;
+        uint24 fee = 3000;
+        address recipient = address(this);
+        uint256 amountOut = linkAmount;
+        uint256 amountInMaximum = msg.value;
+        uint160 sqrtPriceLimitX96 = 0;
+        
+        ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter.ExactOutputSingleParams(
+            tokenIn,
+            tokenOut,
+            fee,
+            recipient,
+            deadline,
+            amountOut,
+            amountInMaximum,
+            sqrtPriceLimitX96
+        );
+        
+        uniswapV3Router.exactOutputSingle{ value: msg.value }(params);
+        uniswapV3Router.refundETH();
+        
+        // refund leftover ETH to user
+        (bool success,) = msg.sender.call{ value: address(this).balance }("");
+        require(success, "refund failed");
+    }
 
     /// @notice Updates the player balance reward after finished battle
     /// @param player - The address of the player

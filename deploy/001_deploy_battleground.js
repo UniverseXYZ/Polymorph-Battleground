@@ -13,12 +13,18 @@ module.exports = async function () {
     const Battleground = await deployments.getOrNull("PolymorphBattleground");
     const Polymorphs = await deployments.getOrNull("PolymorphWithGeneChanger");
     const { log } = deployments;
+    const POLYMORPHS_CONTRACT_ADDRESS = process.env.POLYMORPHS_CONTRACT_ADDRESS;
+    const DAO_ADDRESS = process.env.DAO_ADDRESS;
+    const UNISWAP_SWAP_ROUTER_ADDRESS = process.env.UNISWAP_SWAP_ROUTER_ADDRESS;
+    const LINK_ADDRESS = process.env.LINK_ADDRESS;
+    const WETH_ADDRESS = process.env.WETH_ADDRESS;
+    const XYZ_ADDRESS = process.env.XYZ_ADDRESS;
 
     if (!Battleground) {
 
       const polymorphBattlegroundDeployment = await deployments.deploy("PolymorphBattleground", {
         from: namedAccounts.deployer,
-        args: [POLYMORPHS_CONTRACT_ADDRESS],
+        args: [POLYMORPHS_CONTRACT_ADDRESS, DAO_ADDRESS, UNISWAP_SWAP_ROUTER_ADDRESS, LINK_ADDRESS, WETH_ADDRESS, XYZ_ADDRESS],
       });
 
       console.log("PolymorphBattleground deployed to:", polymorphBattlegroundDeployment.address);

@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.2.0",
+    "@uniswap/v3-periphery": "^1.1.1",
     "dotenv": "^10.0.0",
     "dotenvrc": "^1.0.1",
     "ganache-cli": "^6.12.2",

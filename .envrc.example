@@ -18,3 +18,18 @@ export REPORT_GAS='true'
 
 # Coinmarketcap key for calculating gas price
 export CMC_API_KEY=''
+
+# Polymorph contarct address
+export POLYMORPHS_CONTRACT_ADDRESS=''
+
+# Uniswap V3 address
+export UNISWAP_SWAP_ROUTER_ADDRESS=''
+
+# Link (ChainLink) address
+export LINK_ADDRESS=''
+
+# WETH (Wrapped Ether) address
+export WETH_ADDRESS=''
+
+# XYZ Token address
+export XYZ_ADDRESS=''
