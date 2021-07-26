@@ -74,6 +74,25 @@ contract PolymorphGeneParser {
         uint256 attack = character.max + pants.max + torso.max + footWear.max + eyeWear.max + head.max + weaponRight.max + weaponLeft.max;
         return attack;
     }
+        // Getters
+    function getItem(uint256[] memory genePairs, string memory geneType) internal view returns (Item memory) {
+        uint256 gene = genePairs[geneIndexByGeneTypeMap[geneType]];
+        uint256 itemIndex = gene % itemsCountByTypeMap[geneType];
+        uint256 geneIndex = geneIndexByGeneTypeMap[geneType];
+
+        Item memory item;
+        if (geneIndex == uint(GenePairsIndexes.CHARACTER)) item = characterMap[itemIndex];
+        if (geneIndex == uint(GenePairsIndexes.BACKGROUND)) item = backgroundMap[itemIndex];
+        if (geneIndex == uint(GenePairsIndexes.PANTS)) item = pantsMap[itemIndex];
+        if (geneIndex == uint(GenePairsIndexes.TORSO)) item = torsoMap[itemIndex];
+        if (geneIndex == uint(GenePairsIndexes.FOOTWEAR)) item = footwearMap[itemIndex];
+        if (geneIndex == uint(GenePairsIndexes.EYEWEAR)) item = eyewearMap[itemIndex];
+        if (geneIndex == uint(GenePairsIndexes.HEAD)) item = headMap[itemIndex];
+        if (geneIndex == uint(GenePairsIndexes.WEAPON_RIGHT)) item = weaponRightMap[itemIndex];
+        if (geneIndex == uint(GenePairsIndexes.WEAPON_LEFT)) item = weaponLeftMap[itemIndex];
+
+        return item;
+    }
 
     // Initializers
     function initMappings() internal {
@@ -339,25 +358,6 @@ contract PolymorphGeneParser {
         itemsCountByTypeMap["HEAD"] = 31;
         itemsCountByTypeMap["WEAPON_RIGHT"] = 32;
         itemsCountByTypeMap["WEAPON_LEFT"] = 32;
-    }
-
-    // Getters
-    function getItem(uint256[] memory genePairs, string memory geneType) internal view returns (Item memory) {
-        uint256 gene = genePairs[geneIndexByGeneTypeMap[geneType]];
-        uint256 itemIndex = gene % itemsCountByTypeMap[geneType];
-
-        Item memory item;
-        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.CHARACTER)) item = characterMap[itemIndex];
-        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.BACKGROUND)) item = backgroundMap[itemIndex];
-        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.PANTS)) item = pantsMap[itemIndex];
-        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.TORSO)) item = torsoMap[itemIndex];
-        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.FOOTWEAR)) item = footwearMap[itemIndex];
-        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.EYEWEAR)) item = eyewearMap[itemIndex];
-        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.HEAD)) item = headMap[itemIndex];
-        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.WEAPON_RIGHT)) item = weaponRightMap[itemIndex];
-        if (geneIndexByGeneTypeMap[geneType] == uint(GenePairsIndexes.WEAPON_LEFT)) item = weaponLeftMap[itemIndex];
-
-        return item;
     }
 
     /// @notice Updates specific map item stats

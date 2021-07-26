@@ -52,6 +52,10 @@ module.exports = {
       accounts: [process.env.PRIVATE_KEY],
     },
     hardhat: {
+      gas: 12000000,
+      blockGasLimit: 15000000,
+      allowUnlimitedContractSize: true,
+      timeout: 1800000,
       accounts: {
         count: 100,
       },

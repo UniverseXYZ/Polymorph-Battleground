@@ -56,15 +56,10 @@ describe("PolymorphBattleground", function () {
     );
   });
 
-  it("Should calculate attack properly", async function () {
+  it("Should calculate stats", async function () {
     const { polymorphBattleground } = await loadFixture(deployContracts);
-    const attackTx = await polymorphBattleground.getAttack("161151489786639768");
-    const attackRc = await attackTx.wait();
+    const attackTx = await polymorphBattleground.getStatsPoints(2);
+    expect(attackTx.toString() === "35");
   });
 
-  // it("Should calculate defence properly", async function () {
-  //   const { polymorphBattleground } = await loadFixture(deployContracts);
-  //   const defence = await polymorphBattleground.getDefence(2);
-  //   console.log(defence.toString());
-  // });
 });
