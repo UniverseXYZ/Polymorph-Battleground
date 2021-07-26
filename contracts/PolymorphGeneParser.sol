@@ -4,7 +4,6 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "hardhat/console.sol";
 
 contract PolymorphGeneParser {
-    // TODO:: refactor to library
     using SafeMath for uint256;
 
     enum GenePairsIndexes {
@@ -37,44 +36,54 @@ contract PolymorphGeneParser {
     mapping(string => uint256) private geneIndexByGeneTypeMap;
     mapping(string => uint256) private itemsCountByTypeMap;
 
+    uint256 internal genePairsCount = 9; // each position is 2 digits so its 18 in total
+
     constructor() {
         initMappings();
     }
 
-    function splitGeneToPairs(uint256 _i) public pure returns (uint256[] memory){
+    function splitGeneToPairs(uint256 gene) public view returns (uint256[] memory) {
+        uint256 genes = gene.mod(10**(genePairsCount * 2)); // => 061151489786639768
         uint256[] memory genePairs = new uint256[](9);
         uint256 index = 0;
 
-        while (_i != 0) {
-            uint256 lastDigits = uint256(_i - (_i / 100) * 100); // returns the last 2 digits
+        while (genes != 0) {
+            uint256 lastDigits = uint256(genes - (genes / 100) * 100); // returns the last 2 digits
             genePairs[index] = lastDigits;
-            _i /= 100;
+            genes /= 100;
             index = index + 1;
         }
         return genePairs;
     }
 
-    function getStats(uint256 gene) internal view returns (uint256) { // removed pure
-        uint256 genePositions = 9; // each position is 2 digits so its 18 in total
-        uint256 genes = gene.mod(10**(genePositions * 2)); // => 061151489786639768
-        uint256[] memory genePairs = splitGeneToPairs(genes);
+    function getStats(uint256 gene, uint256[] memory genesRandoms, uint256 skillType) internal view returns (uint256) { // removed pure
+        uint256[] memory genePairs = splitGeneToPairs(gene);
+        // TODO:: Based on the skillType take attack or defence points
 
-        Item memory character = getItem(genePairs, "CHARACTER");
-        // Item memory background = getItem(genePairs, "BACKGROUND");
-        Item memory pants = getItem(genePairs, "PANTS");
-        Item memory torso = getItem(genePairs, "TORSO");
-        Item memory footWear = getItem(genePairs, "FOOTWEAR");
-        Item memory eyeWear = getItem(genePairs, "EYEWEAR");
-        Item memory head = getItem(genePairs, "HEAD");
-        Item memory weaponRight = getItem(genePairs, "WEAPON_RIGHT");
-        Item memory weaponLeft = getItem(genePairs, "WEAPON_LEFT");
+        uint256 cStats = getItemStats(genePairs, "CHARACTER", genesRandoms[geneIndexByGeneTypeMap["CHARACTER"]]);
+        // uint256 bStats = getItemStats(genePairs, "BACKGROUND", genesRandoms[geneIndexByGeneTypeMap["BACKGROUND"]]);
+        uint256 pStats = getItemStats(genePairs, "PANTS", genesRandoms[geneIndexByGeneTypeMap["PANTS"]]);
+        uint256 tStats = getItemStats(genePairs, "TORSO", genesRandoms[geneIndexByGeneTypeMap["TORSO"]]);
+        uint256 fStats = getItemStats(genePairs, "FOOTWEAR", genesRandoms[geneIndexByGeneTypeMap["FOOTWEAR"]]);
+        uint256 eStats = getItemStats(genePairs, "EYEWEAR", genesRandoms[geneIndexByGeneTypeMap["EYEWEAR"]]);
+        uint256 hStats = getItemStats(genePairs, "HEAD", genesRandoms[geneIndexByGeneTypeMap["HEAD"]]);
+        uint256 wrStats = getItemStats(genePairs,"WEAPON_RIGHT", genesRandoms[geneIndexByGeneTypeMap["WEAPON_RIGHT"]]);
+        uint256 wlStats = getItemStats(genePairs,"WEAPON_RIGHT", genesRandoms[geneIndexByGeneTypeMap["WEAPON_RIGHT"]]);
 
-        // TODO:: adjust the formula
-        // TODO:: use Oracle randomness
-        uint256 attack = character.max + pants.max + torso.max + footWear.max + eyeWear.max + head.max + weaponRight.max + weaponLeft.max;
-        return attack;
+        return cStats + pStats + tStats + fStats + eStats + hStats + wrStats + wlStats;
     }
-        // Getters
+
+    function getItemStats(uint256[] memory genePairs, string memory geneType, uint256 randomNumber) internal view returns (uint256) {
+        Item memory item = getItem(genePairs, geneType);
+        uint256 range = item.max - item.min;
+        // Take a random number between that range from 0
+        uint256 random = randomNumber % range;
+        // Construct the result
+        uint256 result = item.min + random;
+        return result;
+    }
+
+    // Getters
     function getItem(uint256[] memory genePairs, string memory geneType) internal view returns (Item memory) {
         uint256 gene = genePairs[geneIndexByGeneTypeMap[geneType]];
         uint256 itemIndex = gene % itemsCountByTypeMap[geneType];
@@ -124,17 +133,17 @@ contract PolymorphGeneParser {
         footwearMap[24] = Item(0, 5, "White-Yellow Football Cleats");
 
         // Character
-        characterMap[0] = Item(0, 0, "Diamond Paws");
-        characterMap[1] = Item(0, 0, "Escrow");
-        characterMap[2] = Item(0, 0, "Frankie");
-        characterMap[3] = Item(0, 0, "Glenn");
-        characterMap[4] = Item(0, 0, "Goldtooth");
-        characterMap[5] = Item(0, 0, "Troll God");
-        characterMap[6] = Item(0, 0, "Charles");
-        characterMap[7] = Item(0, 0, "Mariguana");
-        characterMap[8] = Item(0, 0, "Vitalik");
-        characterMap[9] = Item(0, 0, "Ragnar");
-        characterMap[1] = Item(0, 0, "X-YZ");
+        characterMap[0] = Item(0, 10, "Diamond Paws");
+        characterMap[1] = Item(0, 10, "Escrow");
+        characterMap[2] = Item(0, 10, "Frankie");
+        characterMap[3] = Item(0, 10, "Glenn");
+        characterMap[4] = Item(0, 10, "Goldtooth");
+        characterMap[5] = Item(0, 10, "Troll God");
+        characterMap[6] = Item(0, 10, "Charles");
+        characterMap[7] = Item(0, 10, "Mariguana");
+        characterMap[8] = Item(0, 10, "Vitalik");
+        characterMap[9] = Item(0, 10, "Ragnar");
+        characterMap[1] = Item(0, 10, "X-YZ");
 
         // Pants
         pantsMap[0] = Item(0, 5, "Underwear");

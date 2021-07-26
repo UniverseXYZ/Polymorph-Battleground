@@ -4,8 +4,9 @@ pragma solidity ^0.8.0;
 import "./PolymorphWithGeneChanger.sol";
 import "./PolymorphGeneParser.sol";
 import "./IUniswapV3Router.sol";
+import "./RandomConsumerNumber.sol";
 
-contract PolymorphBattleground is PolymorphGeneParser {
+contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer {
     address public polymorphsContractAddress;
     address payable public daoAddress;
     address private linkAddress;
@@ -21,13 +22,13 @@ contract PolymorphBattleground is PolymorphGeneParser {
     struct BattleEntitiy {
         bool registered;
         uint256 id;
-        uint256 attack;
-        uint256 defence;
+        uint256 stats;
         uint256 skillType;
         address owner;
     }
 
     mapping(uint256 => BattleEntitiy) public battlePool;
+    mapping(bytes32 => uint256) public vrfIdtoMorphId;
     uint256 private enterFee = 0.1 ether;
     uint256 public battlePoolLength = 0;
 
@@ -58,13 +59,11 @@ contract PolymorphBattleground is PolymorphGeneParser {
         require(msg.value >= enterFee, "The sended fee is not enough !");
         require(!battlePool[polymorphId].registered, "Your polymorph has already been registered for the battle que !");
         // TODO:: Transfer the wager to the contract how ??
-        // TODO:: Use only one method for getting attack and defence, no need to do 2 parsings of the gene
-        // TODO:: There may be no need for geting both attack and defence
+
         BattleEntitiy memory entitiy = BattleEntitiy({
             id: polymorphId,
-            registered: true,
-            attack: getStatsPoints(polymorphId),
-            defence: getStatsPoints(polymorphId),
+            registered: false,
+            stats: 0,
             skillType: skillType,
             owner: msg.sender
             });
@@ -72,6 +71,29 @@ contract PolymorphBattleground is PolymorphGeneParser {
         // 6. Enter the battle pool
         battlePool[polymorphId] = entitiy;
         battlePoolLength += 1;
+
+        bytes32 requestId = getRandomNumber();
+        vrfIdtoMorphId[requestId] = polymorphId;
+    }
+
+    /**
+     * Callback function used by VRF Coordinator
+     */
+    function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
+        randomResult = randomness;
+
+        // TODO:: distinguish enter battle calls and get random number calls somehow by the requestId
+
+        // Take the id of the polymorph which made the random number request
+        uint256 polymorphId = vrfIdtoMorphId[requestId];
+        // Take the saved entity by ID
+        BattleEntitiy storage entity = battlePool[polymorphId];
+        // Generate random numbers for all the genes
+        uint256[] memory genesRandoms = expand(randomness, genePairsCount);
+
+        // Calculate stats
+        entity.stats = getStatsPoints(polymorphId, genesRandoms, entity.skillType);
+        entity.registered = true;
     }
 
     /// @notice Backend (like Openzeppelin Defender) will call this function periodically
@@ -80,12 +102,11 @@ contract PolymorphBattleground is PolymorphGeneParser {
 
     /// @notice Calculates the attack score of the polymorph based on its gene
     /// @param polymorphId Id of the polymorph
-    function getStatsPoints(uint256 polymorphId) public view returns (uint256) {
+    function getStatsPoints(uint256 polymorphId, uint256[] memory genesRandoms, uint256 skillType) public view returns (uint256) {
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         uint256 gene = polymorphsContract.geneOf(polymorphId);
-        require(gene != 0, "Cannot calculate attack points for no Gene");
-        uint256 attack = getStats(gene);
-        return attack;
+        require(gene != 0, "Cannot calculate stats points for no Gene");
+        return getStats(gene, genesRandoms, skillType);
     }
 
     /// @notice The actual battle calculation where the comparison happens
