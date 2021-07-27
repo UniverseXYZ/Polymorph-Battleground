@@ -3,12 +3,15 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./PolymorphWithGeneChanger.sol";
 import "./PolymorphGeneParser.sol";
 import "./IUniswapV3Router.sol";
 import "./RandomConsumerNumber.sol";
 
 contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, ReentrancyGuard {
+    using SafeMath for uint256;
+
     address public polymorphsContractAddress;
     address payable public daoAddress;
     address private linkAddress;
@@ -31,6 +34,11 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     // TODO:: Upon draw -> choose the winner based on the random numbers which were drawn for the stats calculation
     // TODO:: claimRewards -> ?
 
+    enum WagerCurrency {
+        XYZ,
+        ETH
+    }
+
     struct BattleEntitiy {
         bool locked;
         uint256 id;
@@ -50,15 +58,17 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     mapping(address => Balance) public playerBalances;
     uint256 private enterFee = 0.1 ether;
     uint256 public battlePoolLength = 0;
+    uint256 public daoFeeBps = 1000; // to be configurable
+    uint256 public operationalFeeBps = 1000; // to be configurable
 
     modifier onlyDAO() {
         require(msg.sender == daoAddress, "Not called from the dao");
         _;
     }
 
-    constructor(address contractAddress, address payable _daoAddress, address _uniswapV3Router, address _linkAddress, address _wethAddress, address _xyzAddress) {
+    constructor(address _polymorphContractAddress, address payable _daoAddress, address _uniswapV3Router, address _linkAddress, address _wethAddress, address _xyzAddress) {
         //TODO:: Add events
-        polymorphsContractAddress = contractAddress;
+        polymorphsContractAddress = _polymorphContractAddress;
         daoAddress = _daoAddress;
         linkAddress = _linkAddress;
         wethAddress = _wethAddress;
@@ -77,7 +87,9 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         require(polymorphsContract.ownerOf(polymorphId) == msg.sender, "You must be the owner of the polymorph");
         require(msg.value >= enterFee, "The sended fee is not enough !");
         require(battlePool[polymorphId].locked, "Your polymorph has already been locked for the battle que !");
-        // TODO:: Transfer the wager to the contract how ??
+
+        // Deducts the required fees and registers the wager balance to the player
+        _registerWagerAndSubFees(msg.sender, msg.value);
 
         (uint256 min, uint256 max) = getStatsPoints(polymorphId, skillType);
 
@@ -88,7 +100,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
             statsMax: max,
             skillType: skillType,
             owner: msg.sender
-            });
+        });
 
         // 6. Enter the battle pool
         battlePool[polymorphId] = entitiy;
@@ -198,11 +210,24 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         }
     }
 
+    function _registerWagerAndSubFees(address player, uint256 wagerAmount) internal {
+        uint256 daoFee = _calculateDAOfee(wagerAmount, daoFeeBps);
+        uint256 operationalFee = _calculateOperationalFees(wagerAmount, operationalFeeBps);
+        uint256 wagerAfterfees = wagerAmount.sub(daoFee).sub(operationalFee);
+
+        // Increment the player balance with the wager amount (after fees being deducted)
+        playerBalances[player].ethBalance = playerBalances[player].ethBalance.add(wagerAfterfees);
+    }
+
     /// @notice Subtracts predefined fee which will be used for covering fees for calling executeRound() and getting LINK for random number generation.
-    function subtractOperationalFees() internal {}
+    function _calculateOperationalFees(uint256 _wagerAmount, uint256 _operationalFeeBps) internal pure returns (uint256) {
+        return _operationalFeeBps.mul(_wagerAmount).div(10000);
+    }
 
     /// @notice Subtracts predefined DAO fee in BPS and sends it to the DAO/Treasury
-    function subtractDAOfee() internal {}
+    function _calculateDAOfee(uint256 _wagerAmount, uint256 _daoFeeBps) internal pure returns (uint256) {
+        return _daoFeeBps.mul(_wagerAmount).div(10000);
+    }
 
     receive() external payable {}
 }
