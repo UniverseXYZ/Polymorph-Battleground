@@ -15,16 +15,28 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     address private wethAddress;
     address private xyzAddress;
     IUniswapV3Router private uniswapV3Router;
-
-    enum BattleStances {
-        ATTACK,
-        DEFFENCE
-    }
+    // TODO:: write docs
+    // TODO:: We should calculate the overal range on every enter of the same polymorph in case of item upgrades(scrambles)
+    // TODO:: Upon executeRound, make request for random number and store it
+    // TODO:: after some time (10 blocks or more) or upon receinvg the event, call battlePolymorphs, take the random number and start the battle flow
+    // TODO:: maybe we should lock the executeRound function in order to not be able to make requests for new randoms, utnil the battle is over
+    // TODO:: battle flow: make two random numbers from the random number -> pick 2 polymorphs -> take 2 new random numbers -> calculate their attack/defence -> do the comaprison
+    // TODO:: Upon selecting the first morph move it to the end of the array (we need to create it)
+    // TODO:: Decrease the possible max number to be array - 1 , so we cannot take the first chosen one
+    // TODO:: Move the second morph to the end
+    // TODO:: should we lock them, so they cannot be picked during the execution ?
+    // TODO:: Pop them from the array
+    // TODO:: Battle them (compare their stats)
+    // TODO:: Handle WIN/LOSE/DRAW
+    // TODO:: Upon win/lose -> adjust owners balances
+    // TODO:: Upon draw -> choose the winner based on the random numbers which were drawn for the stats calculation
+    // TODO:: claimRewards -> ?
 
     struct BattleEntitiy {
         bool registered;
         uint256 id;
-        uint256 stats;
+        uint256 statsMin;
+        uint256 statsMax;
         uint256 skillType;
         address owner;
     }
@@ -68,10 +80,13 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         require(!battlePool[polymorphId].registered, "Your polymorph has already been registered for the battle que !");
         // TODO:: Transfer the wager to the contract how ??
 
+        (uint256 min, uint256 max) = getStatsPoints(polymorphId, skillType);
+
         BattleEntitiy memory entitiy = BattleEntitiy({
             id: polymorphId,
-            registered: false,
-            stats: 0,
+            registered: true,
+            statsMin: min,
+            statsMax: max,
             skillType: skillType,
             owner: msg.sender
             });
@@ -79,42 +94,39 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         // 6. Enter the battle pool
         battlePool[polymorphId] = entitiy;
         battlePoolLength += 1;
-
-        bytes32 requestId = getRandomNumber();
-        vrfIdtoMorphId[requestId] = polymorphId;
     }
 
     /**
      * Callback function used by VRF Coordinator
      */
-    function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
-        randomResult = randomness;
+    // function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
+    //     randomResult = randomness;
 
-        // TODO:: distinguish enter battle calls and get random number calls somehow by the requestId
 
         // Take the id of the polymorph which made the random number request
-        uint256 polymorphId = vrfIdtoMorphId[requestId];
+        // uint256 polymorphId = vrfIdtoMorphId[requestId];
         // Take the saved entity by ID
-        BattleEntitiy storage entity = battlePool[polymorphId];
+        // BattleEntitiy storage entity = battlePool[polymorphId];
         // Generate random numbers for all the genes
-        uint256[] memory genesRandoms = expand(randomness, genePairsCount);
+        // uint256[] memory genesRandoms = expand(randomness, genePairsCount);
 
         // Calculate stats
-        entity.stats = getStatsPoints(polymorphId, genesRandoms, entity.skillType);
-        entity.registered = true;
-    }
+        // entity.stats = getStatsPoints(polymorphId, genesRandoms, entity.skillType);
+        // entity.registered = true;
+    // }
 
     /// @notice Backend (like Openzeppelin Defender) will call this function periodically
     /// It will pull two random polymorphs from the battle pool using the Chainlink VRF
-    function executeRound() external {}
+    function executeRound() external {
+    }
 
     /// @notice Calculates the attack score of the polymorph based on its gene
     /// @param polymorphId Id of the polymorph
-    function getStatsPoints(uint256 polymorphId, uint256[] memory genesRandoms, uint256 skillType) public view returns (uint256) {
+    function getStatsPoints(uint256 polymorphId, uint256 skillType) public view returns (uint256 min, uint256 max) {
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         uint256 gene = polymorphsContract.geneOf(polymorphId);
         require(gene != 0, "Cannot calculate stats points for no Gene");
-        return getStats(gene, genesRandoms, skillType);
+        return getStats(gene, skillType);
     }
 
     /// @notice The actual battle calculation where the comparison happens
@@ -124,20 +136,12 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         internal
     {}
 
-    /// @notice Get the attack/deffence range of specific attribute. Use Chainlink VRF to select randomly number within the predefined range.
-    /// @param trait - The trait
-    /// @param gene - The gene
-    function getBattleAttributeRange(uint256 trait, uint256 gene)
-        internal
-        view
-    {}
-
     /// @notice converts it to LINK, so costs can be coverd for RNG generation
     /// @param linkAmount Exact LINK(Chainlink) amount to swap
     function getLinkForRNGCosts(uint256 linkAmount) public payable {
         require(msg.value > 0, "Must pass non 0 ETH amount");
         require(linkAmount > 0, "Must pass non 0 LINK amount");
-        
+
         uint256 deadline = block.timestamp + 60;
         address tokenIn = wethAddress;
         address tokenOut = linkAddress;
@@ -146,7 +150,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         uint256 amountOut = linkAmount;
         uint256 amountInMaximum = msg.value;
         uint160 sqrtPriceLimitX96 = 0;
-        
+
         ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter.ExactOutputSingleParams(
             tokenIn,
             tokenOut,
@@ -157,10 +161,10 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
             amountInMaximum,
             sqrtPriceLimitX96
         );
-        
+
         uniswapV3Router.exactOutputSingle{ value: msg.value }(params);
         uniswapV3Router.refundETH();
-        
+
         // refund leftover ETH to user
         (bool success,) = msg.sender.call{ value: address(this).balance }("");
         require(success, "Refund Failed");
