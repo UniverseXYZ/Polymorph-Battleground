@@ -1,12 +1,14 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./PolymorphWithGeneChanger.sol";
 import "./PolymorphGeneParser.sol";
 import "./IUniswapV3Router.sol";
 import "./RandomConsumerNumber.sol";
 
-contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer {
+contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, ReentrancyGuard {
     address public polymorphsContractAddress;
     address payable public daoAddress;
     address private linkAddress;
@@ -27,8 +29,14 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer {
         address owner;
     }
 
+    struct Balance {
+        uint256 xyzBalance;
+        uint256 ethBalance;
+    }
+
     mapping(uint256 => BattleEntitiy) public battlePool;
     mapping(bytes32 => uint256) public vrfIdtoMorphId;
+    mapping(address => Balance) public playerBalances;
     uint256 private enterFee = 0.1 ether;
     uint256 public battlePoolLength = 0;
 
@@ -155,15 +163,33 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer {
         
         // refund leftover ETH to user
         (bool success,) = msg.sender.call{ value: address(this).balance }("");
-        require(success, "refund failed");
+        require(success, "Refund Failed");
     }
 
     /// @notice Updates the player balance reward after finished battle
     /// @param player - The address of the player
-    function upadteRewardBalance(address player) internal {}
+    function upadteRewardBalance(address player) internal {
+        // TODO :: update the playerBalances mapping
+    }
 
     /// @notice Claims the available balance of player
-    function claimRewards() external {}
+    function claimRewards() external nonReentrant {
+        Balance storage playerBalance = playerBalances[msg.sender];
+        address payable recipient = payable(msg.sender);
+
+        if (playerBalance.xyzBalance > 0) {
+            uint256 xyzTransferAmount = playerBalance.xyzBalance;
+            playerBalance.xyzBalance = 0;
+            require(IERC20(xyzAddress).transferFrom(address(this), msg.sender, xyzTransferAmount), "Transfer failed");
+        }
+
+        if (playerBalance.ethBalance > 0) {
+            uint256 ethTransferAmount = playerBalance.ethBalance;
+            playerBalance.ethBalance = 0;
+            (bool success, ) = recipient.call{value: ethTransferAmount}("");
+            require(success, "Transfer failed");
+        }
+    }
 
     /// @notice Subtracts predefined fee which will be used for covering fees for calling executeRound() and getting LINK for random number generation.
     function subtractOperationalFees() internal {}
