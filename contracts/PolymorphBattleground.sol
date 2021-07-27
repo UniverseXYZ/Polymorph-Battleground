@@ -129,6 +129,9 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     /// @notice Backend (like Openzeppelin Defender) will call this function periodically
     /// It will pull two random polymorphs from the battle pool using the Chainlink VRF
     function executeRound() external {
+        require(!lockExecuteRound, "Round execution has been locked !");
+        lockExecuteRound = true;
+        getRandomNumber();
     }
 
     /// @notice Calculates the attack score of the polymorph based on its gene
@@ -148,7 +151,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     {
         // TODO:: Before the round lock the polymorph
         // TODO:: After the round unlock the polymorph
-
+        // TODO:: After the round allow executeRound
     }
 
     /// @notice converts it to LINK, so costs can be coverd for RNG generation

@@ -5,7 +5,8 @@ import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
 contract RandomNumberConsumer is VRFConsumerBase {
     bytes32 internal keyHash;
     uint256 internal fee;
-    uint256 public randomResult;
+    uint256 public randomResult; // TODO:: should we change this to private after dev ?
+    bool internal lockExecuteRound;
 
     /**
      * Constructor inherits VRFConsumerBase
