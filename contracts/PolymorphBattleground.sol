@@ -19,9 +19,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     address private xyzAddress;
     IUniswapV3Router private uniswapV3Router;
     // TODO:: write docs
-    // TODO:: Upon executeRound, make request for random number and store it
     // TODO:: after some time (10 blocks or more) or upon receinvg the event, call battlePolymorphs, take the random number and start the battle flow
-    // TODO:: maybe we should lock the executeRound function in order to not be able to make requests for new randoms, utnil the battle is over
     // TODO:: battle flow: make two random numbers from the random number -> pick 2 polymorphs -> take 2 new random numbers -> calculate their attack/defence -> do the comaprison
     // TODO:: Upon selecting the first morph move it to the end of the array (we need to create it)
     // TODO:: Decrease the possible max number to be array - 1 , so we cannot take the first chosen one
@@ -40,7 +38,8 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     }
 
     struct BattleEntitiy {
-        bool locked;
+        bool locked; // Gets true when the battle has started
+        bool inBattlePool; // Gets true upon added into the battle pool in enterBattle()
         uint256 id;
         uint256 statsMin;
         uint256 statsMax;
@@ -53,11 +52,11 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         uint256 ethBalance;
     }
 
-    mapping(uint256 => BattleEntitiy) public battlePool;
+    mapping(uint256 => BattleEntitiy) public polymorphs;
     mapping(bytes32 => uint256) public vrfIdtoMorphId;
     mapping(address => Balance) public playerBalances;
+    uint256[] public battlePool;
     uint256 private enterFee = 0.1 ether;
-    uint256 public battlePoolLength = 0;
     uint256 public daoFeeBps = 1000; // to be configurable
     uint256 public operationalFeeBps = 1000; // to be configurable
 
@@ -77,6 +76,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     }
 
     /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the pool.
+    /// @notice The user should be able to enter the function again with the same polymoprhId if a battle with his ID has not started, update its stats, change its owner.
     /// @param polymorphId Id of the polymorph
     /// @param skillType Attack or Defence
     function enterBattle(uint256 polymorphId, uint256 skillType)
@@ -86,25 +86,41 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         require(polymorphsContract.ownerOf(polymorphId) == msg.sender, "You must be the owner of the polymorph");
         require(msg.value >= enterFee, "The sended fee is not enough !");
-        require(battlePool[polymorphId].locked, "Your polymorph has already been locked for the battle que !");
+        require(!polymorphs[polymorphId].locked, "Your polymorph has already been locked for the battle que !");
 
         // Deducts the required fees and registers the wager balance to the player
         _registerWagerAndSubFees(msg.sender, msg.value);
 
         (uint256 min, uint256 max) = getStatsPoints(polymorphId, skillType);
 
-        BattleEntitiy memory entitiy = BattleEntitiy({
-            id: polymorphId,
-            locked: false,
-            statsMin: min,
-            statsMax: max,
-            skillType: skillType,
-            owner: msg.sender
-        });
+        // Create or update an entity in the polymorphs mapping
+
+        BattleEntitiy storage entitiy = polymorphs[polymorphId];
+
+        if (entitiy.id != 0) {
+            // Update an already existing entity (update stats, change owner, change skillType)
+            entitiy.statsMin = min;
+            entitiy.statsMax = max;
+            entitiy.skillType = skillType;
+            entitiy.owner = msg.sender;
+        } else {
+            // Add new entity
+            entitiy.id = polymorphId;
+            entitiy.inBattlePool = false;
+            entitiy.locked = false;
+            entitiy.statsMin = min;
+            entitiy.statsMax = max;
+            entitiy.skillType = skillType;
+            entitiy.owner = msg.sender;
+            // Insert into the mapping
+            polymorphs[polymorphId] = entitiy;
+        }
 
         // 6. Enter the battle pool
-        battlePool[polymorphId] = entitiy;
-        battlePoolLength += 1;
+        if (!entitiy.inBattlePool) {
+            entitiy.inBattlePool = true;
+            battlePool.push(polymorphId);
+        }
     }
 
     /**
@@ -152,6 +168,9 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         // TODO:: Before the round lock the polymorph
         // TODO:: After the round unlock the polymorph
         // TODO:: After the round allow executeRound
+        // battle flow: make two random numbers from the random number -> pick 2 polymorphs -> take 2 new random numbers -> calculate their attack/defence -> do the comaprison
+        uint256[] memory randoms = expand(randomness, 2);
+
     }
 
     /// @notice converts it to LINK, so costs can be coverd for RNG generation
