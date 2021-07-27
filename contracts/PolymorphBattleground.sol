@@ -16,7 +16,6 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     address private xyzAddress;
     IUniswapV3Router private uniswapV3Router;
     // TODO:: write docs
-    // TODO:: We should calculate the overal range on every enter of the same polymorph in case of item upgrades(scrambles)
     // TODO:: Upon executeRound, make request for random number and store it
     // TODO:: after some time (10 blocks or more) or upon receinvg the event, call battlePolymorphs, take the random number and start the battle flow
     // TODO:: maybe we should lock the executeRound function in order to not be able to make requests for new randoms, utnil the battle is over
@@ -33,7 +32,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     // TODO:: claimRewards -> ?
 
     struct BattleEntitiy {
-        bool registered;
+        bool locked;
         uint256 id;
         uint256 statsMin;
         uint256 statsMax;
@@ -77,14 +76,14 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         require(polymorphsContract.ownerOf(polymorphId) == msg.sender, "You must be the owner of the polymorph");
         require(msg.value >= enterFee, "The sended fee is not enough !");
-        require(!battlePool[polymorphId].registered, "Your polymorph has already been registered for the battle que !");
+        require(battlePool[polymorphId].locked, "Your polymorph has already been locked for the battle que !");
         // TODO:: Transfer the wager to the contract how ??
 
         (uint256 min, uint256 max) = getStatsPoints(polymorphId, skillType);
 
         BattleEntitiy memory entitiy = BattleEntitiy({
             id: polymorphId,
-            registered: true,
+            locked: false,
             statsMin: min,
             statsMax: max,
             skillType: skillType,
@@ -134,7 +133,11 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     /// @param polymorphId_ The id of the polymorph which will battle
     function battlePolymorphs(uint256 polymorphId, uint256 polymorphId_)
         internal
-    {}
+    {
+        // TODO:: Before the round lock the polymorph
+        // TODO:: After the round unlock the polymorph
+
+    }
 
     /// @notice converts it to LINK, so costs can be coverd for RNG generation
     /// @param linkAmount Exact LINK(Chainlink) amount to swap
