@@ -21,6 +21,8 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     // TODO:: write docs
     // TODO:: Upon win/lose -> adjust owners balances
     // TODO:: claimRewards -> ?
+    // TODO:: 6. We will keep track of the current processed roundId. (In order to know which battles to start next)
+    // TODO:: 7. We don’t store records about polymorph wins or loses, all that kind of data will be emitted trough events and captured by the graph.
 
     enum WagerCurrency {
         XYZ,
@@ -47,11 +49,16 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     mapping(uint256 => BattleEntitiy) public polymorphs;
     mapping(bytes32 => uint256) public vrfIdtoMorphId;
     mapping(address => Balance) public playerBalances;
+    mapping(uint256 => uint256[]) public battlePools; // roundId => [22,23] polymorphs ids
+    mapping(address => mapping(uint256 => BattleEntitiy)) public userEntities; // address => roundId => BattleEntity
     uint256[] public battlePool;
     bool public poolLocked;
     uint256 private enterFee = 0.1 ether;
     uint256 public daoFeeBps = 1000; // to be configurable
     uint256 public operationalFeeBps = 1000; // to be configurable
+    uint256 public roundIndex; // Current round index to be executed
+    uint256 public battlePoolIndex; // Current battle pool index to insert entities into
+    uint256 private maxPoolSize = 2; // to be configurable
 
     modifier onlyDAO() {
         require(msg.sender == daoAddress, "Not called from the dao");
@@ -79,43 +86,36 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         require(polymorphsContract.ownerOf(polymorphId) == msg.sender, "You must be the owner of the polymorph");
         require(msg.value >= enterFee, "The sended fee is not enough !");
-        require((!polymorphs[polymorphId].inBattlePool && !poolLocked), "Your polymorph has already been locked for the battle que !");
+
+        // Handle owner already registered for the battlePoolIndex
+        require(userEntities[msg.sender][battlePoolIndex].id == 0, "You have already registered for the current battle pool");
+
         // Deducts the required fees and registers the wager balance to the player
         _registerWagerAndSubFees(msg.sender, msg.value);
+
+        // Handle pool overflow by increasing the current battlePoolIndex so we can start fulfilling the next pool
+        if (battlePools[battlePoolIndex].length == maxPoolSize) battlePoolIndex = battlePoolIndex + 1;
 
         (uint256 min, uint256 max) = getStatsPoints(polymorphId, skillType);
 
         // Create or update an entity in the polymorphs mapping
+        BattleEntitiy memory entitiy = BattleEntitiy({
+            id: polymorphId,
+            inBattlePool: false,
+            statsMin: min,
+            statsMax: max,
+            skillType: skillType,
+            owner: msg.sender,
+            wins: 0,
+            loses: 0,
+            lastBattleStats: 0
+        });
 
-        BattleEntitiy storage entitiy = polymorphs[polymorphId];
+        // Insert into the userEntities => for that pool index the user will fight with this polymoprh
+        userEntities[msg.sender][battlePoolIndex] = entitiy;
 
-        if (entitiy.id != 0) {
-            // Update an already existing entity (update stats, change owner, change skillType)
-            entitiy.statsMin = min;
-            entitiy.statsMax = max;
-            entitiy.skillType = skillType;
-            entitiy.owner = msg.sender;
-        } else {
-            // Add new entity
-            entitiy.id = polymorphId;
-            entitiy.inBattlePool = false;
-            entitiy.statsMin = min;
-            entitiy.statsMax = max;
-            entitiy.skillType = skillType;
-            entitiy.owner = msg.sender;
-            entitiy.wins = 0;
-            entitiy.loses = 0;
-            entitiy.lastBattleStats = 0;
-
-            // Insert into the mapping
-            polymorphs[polymorphId] = entitiy;
-        }
-
-        // 6. Enter the battle pool
-        if (!entitiy.inBattlePool) {
-            entitiy.inBattlePool = true;
-            battlePool.push(polymorphId);
-        }
+        // 6. Enter the battlePools with the polymorphId
+        battlePools[battlePoolIndex].push(polymorphId);
     }
 
     /// @notice Backend (like Openzeppelin Defender) will call this function periodically
@@ -128,7 +128,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
 
     /// @notice Calculates the attack score of the polymorph based on its gene
     /// @param polymorphId Id of the polymorph
-    function getStatsPoints(uint256 polymorphId, uint256 skillType) public view returns (uint256 min, uint256 max) {
+    function getStatsPoints(uint256 polymorphId, uint256 skillType) private view returns (uint256 min, uint256 max) {
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         uint256 gene = polymorphsContract.geneOf(polymorphId);
         require(gene != 0, "Cannot calculate stats points for no Gene");
@@ -209,7 +209,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     }
 
     /// @notice Moves battle entity to the end of the pool and pops it out
-    function swapAndPopBattleEntity(uint256 index) public {
+    function swapAndPopBattleEntity(uint256 index) private {
         // If its not already the last element
         if (index != battlePool.length - 1) {
             uint256 temp = battlePool[battlePool.length - 1];
