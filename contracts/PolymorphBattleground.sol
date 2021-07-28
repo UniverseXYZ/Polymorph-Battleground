@@ -19,17 +19,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     address private xyzAddress;
     IUniswapV3Router private uniswapV3Router;
     // TODO:: write docs
-    // TODO:: after some time (10 blocks or more) or upon receinvg the event, call battlePolymorphs, take the random number and start the battle flow
-    // TODO:: battle flow: make two random numbers from the random number -> pick 2 polymorphs -> take 2 new random numbers -> calculate their attack/defence -> do the comaprison
-    // TODO:: Upon selecting the first morph move it to the end of the array (we need to create it)
-    // TODO:: Decrease the possible max number to be array - 1 , so we cannot take the first chosen one
-    // TODO:: Move the second morph to the end
-    // TODO:: should we lock them, so they cannot be picked during the execution ?
-    // TODO:: Pop them from the array
-    // TODO:: Battle them (compare their stats)
-    // TODO:: Handle WIN/LOSE/DRAW
     // TODO:: Upon win/lose -> adjust owners balances
-    // TODO:: Upon draw -> choose the winner based on the random numbers which were drawn for the stats calculation
     // TODO:: claimRewards -> ?
 
     enum WagerCurrency {
@@ -38,13 +28,15 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     }
 
     struct BattleEntitiy {
-        bool locked; // Gets true when the battle has started
         bool inBattlePool; // Gets true upon added into the battle pool in enterBattle()
         uint256 id;
         uint256 statsMin;
         uint256 statsMax;
         uint256 skillType;
         address owner;
+        uint256 wins;
+        uint256 loses;
+        uint256 lastBattleStats;
     }
 
     struct Balance {
@@ -56,6 +48,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     mapping(bytes32 => uint256) public vrfIdtoMorphId;
     mapping(address => Balance) public playerBalances;
     uint256[] public battlePool;
+    bool public poolLocked;
     uint256 private enterFee = 0.1 ether;
     uint256 public daoFeeBps = 1000; // to be configurable
     uint256 public operationalFeeBps = 1000; // to be configurable
@@ -86,8 +79,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         require(polymorphsContract.ownerOf(polymorphId) == msg.sender, "You must be the owner of the polymorph");
         require(msg.value >= enterFee, "The sended fee is not enough !");
-        require(!polymorphs[polymorphId].locked, "Your polymorph has already been locked for the battle que !");
-
+        require((!polymorphs[polymorphId].inBattlePool && !poolLocked), "Your polymorph has already been locked for the battle que !");
         // Deducts the required fees and registers the wager balance to the player
         _registerWagerAndSubFees(msg.sender, msg.value);
 
@@ -107,11 +99,14 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
             // Add new entity
             entitiy.id = polymorphId;
             entitiy.inBattlePool = false;
-            entitiy.locked = false;
             entitiy.statsMin = min;
             entitiy.statsMax = max;
             entitiy.skillType = skillType;
             entitiy.owner = msg.sender;
+            entitiy.wins = 0;
+            entitiy.loses = 0;
+            entitiy.lastBattleStats = 0;
+
             // Insert into the mapping
             polymorphs[polymorphId] = entitiy;
         }
@@ -122,25 +117,6 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
             battlePool.push(polymorphId);
         }
     }
-
-    /**
-     * Callback function used by VRF Coordinator
-     */
-    // function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
-    //     randomResult = randomness;
-
-
-        // Take the id of the polymorph which made the random number request
-        // uint256 polymorphId = vrfIdtoMorphId[requestId];
-        // Take the saved entity by ID
-        // BattleEntitiy storage entity = battlePool[polymorphId];
-        // Generate random numbers for all the genes
-        // uint256[] memory genesRandoms = expand(randomness, genePairsCount);
-
-        // Calculate stats
-        // entity.stats = getStatsPoints(polymorphId, genesRandoms, entity.skillType);
-        // entity.registered = true;
-    // }
 
     /// @notice Backend (like Openzeppelin Defender) will call this function periodically
     /// It will pull two random polymorphs from the battle pool using the Chainlink VRF
@@ -160,17 +136,92 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     }
 
     /// @notice The actual battle calculation where the comparison happens
-    /// @param polymorphId The id of the polymorph which will battle
-    /// @param polymorphId_ The id of the polymorph which will battle
-    function battlePolymorphs(uint256 polymorphId, uint256 polymorphId_)
-        internal
+    function battlePolymorphs()
+        public
     {
-        // TODO:: Before the round lock the polymorph
-        // TODO:: After the round unlock the polymorph
-        // TODO:: After the round allow executeRound
-        // battle flow: make two random numbers from the random number -> pick 2 polymorphs -> take 2 new random numbers -> calculate their attack/defence -> do the comaprison
-        uint256[] memory randoms = expand(randomness, 2);
+        require(battlePool.length >= 2, "Not enough polymorphs into the Battle Pool !");
+        require(randomResult != 0 && lockExecuteRound, "Random result is 0");
 
+        // Lock the battlePool so entities cannot be updated, re-entered
+        poolLocked = true;
+
+        // Take random numbers for picking opponents
+        uint256[] memory randoms = expand(randomResult, 2);
+
+        // Take a random number between that range from 0 and take the polymorph behind it
+        uint256 first = randoms[0] % (battlePool.length - 1);
+        BattleEntitiy storage entitiy = polymorphs[battlePool[first]];
+
+        // Move the polymorph to the end of the array and pop it
+        swapAndPopBattleEntity(first);
+
+        // Take second random number from the range
+        uint256 second;
+        if (battlePool.length - 1 < 1) second = randoms[1] % 1; // if the length is 1 we should take 1 otherwise number % 0 = NaN
+        else second = randoms[1] % (battlePool.length - 1);
+
+        BattleEntitiy storage entitiy2 = polymorphs[battlePool[second]];
+        // Move the polymorph to the end of the array and pop it
+        swapAndPopBattleEntity(second);
+
+        // Take random numbers for stats calculations
+        uint256[] memory statsRandoms = expand(randoms[1], 2);
+        uint256 statsFirst = entitiy.statsMin + (statsRandoms[0] % (entitiy.statsMax - entitiy.statsMin));
+        uint256 statsSecond = entitiy2.statsMin + (statsRandoms[1] % (entitiy2.statsMax - entitiy2.statsMin));
+
+        if (statsFirst > statsSecond) {
+            entitiy.wins = entitiy.wins + 1;
+            entitiy2.loses = entitiy2.loses + 1;
+        }
+
+        if (statsSecond > statsFirst) {
+            entitiy.loses = entitiy.loses + 1;
+            entitiy2.wins = entitiy2.wins + 1;
+        }
+
+        // Equal stats case, select the winner based on the random numbers used for forming the stats
+        if (statsFirst == statsSecond) {
+            if (statsRandoms[0] > statsRandoms[1]) {
+                entitiy.wins = entitiy.wins + 1;
+                entitiy2.loses = entitiy2.loses + 1;
+            } else {
+                entitiy.loses = entitiy.loses + 1;
+                entitiy2.wins = entitiy2.wins + 1;
+            }
+        }
+
+        // Save last stats points
+        entitiy.lastBattleStats = statsFirst;
+        entitiy2.lastBattleStats = statsSecond;
+
+        // Exit the battle pool
+        entitiy.inBattlePool = false;
+        entitiy2.inBattlePool = false;
+
+        // Reset randomResult
+        randomResult = 0;
+
+        // Allow executeRound
+        lockExecuteRound = false;
+
+        // Unlock the battlePool so entities can be updated, re-entered
+        poolLocked = false;
+    }
+
+    /// @notice Moves battle entity to the end of the pool and pops it out
+    function swapAndPopBattleEntity(uint256 index) public {
+        // If its not already the last element
+        if (index != battlePool.length - 1) {
+            uint256 temp = battlePool[battlePool.length - 1];
+            uint256 curr = battlePool[index];
+            // Move the current to the end
+            battlePool[battlePool.length - 1] = curr;
+            // Put the last one on the current place
+            battlePool[index] = temp;
+            // Remove the last element
+        }
+        // Remove the element
+        battlePool.pop();
     }
 
     /// @notice converts it to LINK, so costs can be coverd for RNG generation
