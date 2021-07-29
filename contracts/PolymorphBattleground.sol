@@ -43,26 +43,27 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     uint256 private enterFee = 0.1 ether;
     uint256 public daoFeeBps = 1000; // to be configurable
     uint256 public operationalFeeBps = 1000; // to be configurable
-    uint256 public roundIndex; // Current round index to be executed
+    uint256 public roundIndex; // Round index to be executed
     uint256 public battlePoolIndex; // Current battle pool index to insert entities into
-    uint256 private maxPoolSize = 2;
+    uint256 private maxPoolSize = 100; // to be configurable
+    bool public inRound; // If the execution of a round has begun
 
     event LogBattleEntered(
-        uint256 polymorphId, 
-        uint256 skillType, 
-        address owner, 
+        uint256 polymorphId,
+        uint256 skillType,
+        address owner,
         uint256 time
     );
 
     event LogRoundExecuted(
-        uint256 roundIndex, 
+        uint256 roundIndex,
         uint256 time
     );
 
     event LogPolymorphsBattled(
-        uint256 firstPolymorphId, 
-        uint256 firstPolymorphStats, 
-        uint256 secondPolymorphId, 
+        uint256 firstPolymorphId,
+        uint256 firstPolymorphStats,
+        uint256 secondPolymorphId,
         uint256 secondPolymorphStats,
         address winner,
         uint256 time
@@ -94,7 +95,6 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     }
 
     /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the pool.
-    /// @notice The user should be able to enter the function again with the same polymoprhId if a battle with his ID has not started, update its stats, change its owner.
     /// @param polymorphId Id of the polymorph
     /// @param skillType Attack or Defence
     function enterBattle(uint256 polymorphId, uint256 skillType)
@@ -112,7 +112,11 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         _registerWagerAndSubFees(msg.sender, msg.value);
 
         // Handle pool overflow by increasing the current battlePoolIndex so we can start fulfilling the next pool
-        if (battlePools[battlePoolIndex].length == maxPoolSize) battlePoolIndex = battlePoolIndex + 1;
+        // Handle started pool fight with left open slots, fullfil the next pool
+        if (
+            battlePools[battlePoolIndex].length == maxPoolSize ||
+            inRound && battlePoolIndex == roundIndex
+            ) battlePoolIndex = battlePoolIndex + 1;
 
         (uint256 min, uint256 max) = getStatsPoints(polymorphId, skillType);
 
@@ -156,61 +160,95 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     function battlePolymorphs()
         public
     {
+        //TODO:: If the pool is not even we should transfer the odd entity in the next pool
         require(battlePools[roundIndex].length >= 2, "Not enough polymorphs into the Battle Pool !");
         require(randomResult != 0 && lockExecuteRound, "Random result is 0");
 
-        // Take random numbers for picking opponents
-        uint256[] memory randoms = expand(randomResult, 2);
+        // Indicate that a round has started, so no new entries cant be accepted in the fight pool
+        inRound = true;
 
-        // Take a random index between 0 and the current pool range
-        uint256 first = randoms[0] % (battlePools[roundIndex].length - 1);
-        uint256 firstId = battlePools[roundIndex][first];
-        BattleEntitiy storage entitiy = entities[roundIndex][firstId];
+        while(battlePools[roundIndex].length >= 2) {
+            // Take random numbers for picking opponents
+            uint256[] memory randoms = expand(randomResult, 2);
 
-        // Move the polymorph to the end of the array and pop it
-        swapAndPopEntity(first);
+            // Take a random index between 0 and the current pool range
+            uint256 first = randoms[0] % (battlePools[roundIndex].length - 1);
+            uint256 firstId = battlePools[roundIndex][first];
+            BattleEntitiy storage entitiy = entities[roundIndex][firstId];
 
-        // Take second random number from the range
-        uint256 second;
-        if (battlePools[roundIndex].length - 1 < 1) second = randoms[1] % 1; // if the length is 1 we should take 1 otherwise number % 0 = NaN
-        else second = randoms[1] % (battlePools[roundIndex].length - 1);
-        uint256 secondId = battlePools[roundIndex][second];
-        BattleEntitiy storage entitiy2 = entities[roundIndex][secondId];
+            // Move the polymorph to the end of the array and pop it
+            swapAndPopEntity(first);
 
-        // Move the polymorph to the end of the array and pop it
-        swapAndPopEntity(second);
+            // Take second random number from the range
+            uint256 second;
+            if (battlePools[roundIndex].length - 1 < 1) second = randoms[1] % 1; // if the length is 1 we should take 1 otherwise number % 0 = NaN
+            else second = randoms[1] % (battlePools[roundIndex].length - 1);
+            uint256 secondId = battlePools[roundIndex][second];
+            BattleEntitiy storage entitiy2 = entities[roundIndex][secondId];
 
-        // Take random numbers for stats calculations
-        uint256[] memory statsRandoms = expand(randoms[1], 2);
+            // Move the polymorph to the end of the array and pop it
+            swapAndPopEntity(second);
 
-        // Calculate stats
-        uint256 statsFirst = entitiy.statsMin + (statsRandoms[0] % (entitiy.statsMax - entitiy.statsMin));
-        uint256 statsSecond = entitiy2.statsMin + (statsRandoms[1] % (entitiy2.statsMax - entitiy2.statsMin));
+            // Take random numbers for stats calculations
+            uint256[] memory statsRandoms = expand(randoms[1], 2);
 
-        if (statsFirst > statsSecond) {
-            entitiy.wins = entitiy.wins + 1;
-            entitiy2.loses = entitiy2.loses + 1;
-        }
+            // Calculate stats
+            uint256 statsFirst = entitiy.statsMin + (statsRandoms[0] % (entitiy.statsMax - entitiy.statsMin));
+            uint256 statsSecond = entitiy2.statsMin + (statsRandoms[1] % (entitiy2.statsMax - entitiy2.statsMin));
 
-        if (statsSecond > statsFirst) {
-            entitiy.loses = entitiy.loses + 1;
-            entitiy2.wins = entitiy2.wins + 1;
-        }
-
-        // Equal stats case, select the winner based on the random numbers used for forming the stats
-        if (statsFirst == statsSecond) {
-            if (statsRandoms[0] > statsRandoms[1]) {
+            // winner
+            address winner;
+            if (statsFirst > statsSecond) {
                 entitiy.wins = entitiy.wins + 1;
                 entitiy2.loses = entitiy2.loses + 1;
-            } else {
+                winner = entitiy.owner;
+            }
+
+            if (statsSecond > statsFirst) {
                 entitiy.loses = entitiy.loses + 1;
                 entitiy2.wins = entitiy2.wins + 1;
+                winner = entitiy2.owner;
             }
+
+            // Equal stats case, select the winner based on the random numbers used for forming the stats
+            if (statsFirst == statsSecond) {
+                if (statsRandoms[0] > statsRandoms[1]) {
+                    entitiy.wins = entitiy.wins + 1;
+                    entitiy2.loses = entitiy2.loses + 1;
+                    winner = entitiy.owner;
+                } else {
+                    entitiy.loses = entitiy.loses + 1;
+                    entitiy2.wins = entitiy2.wins + 1;
+                    winner = entitiy2.owner;
+                }
+            }
+
+            // // Save last stats points
+            entitiy.lastBattleStats = statsFirst;
+            entitiy2.lastBattleStats = statsSecond;
+
+            emit LogPolymorphsBattled(
+                entitiy.id,
+                entitiy.lastBattleStats,
+                entitiy2.id,
+                entitiy2.lastBattleStats,
+                winner,
+                block.timestamp
+                );
+
+            // Update the last random result for that pool fight, so we will have a new one in the next cycle
+            randomResult = statsRandoms[1];
         }
 
-        // // Save last stats points
-        entitiy.lastBattleStats = statsFirst;
-        entitiy2.lastBattleStats = statsSecond;
+
+        // TODO:: handle the case if we have odd number of participants
+        if (battlePools[roundIndex].length == 1) {
+            // Push the polymoph into the new active pool
+            // Should we delete the entity from the mapping ? maybe no (additional gas fees)
+            // Create new entity and add it into the mapping for the next round
+        }
+
+        // TODO:: handle the case if the roundIndex == battlePoolIndex to increase the battbattlePoolIndex after the fight
 
         // Reset randomResult
         randomResult = 0;
@@ -220,6 +258,9 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
 
         // Increase the round index
         roundIndex = roundIndex + 1;
+
+        // Indicate that the fight round has finished
+        inRound = false;
     }
 
     /// @notice Moves battle entity to the end of the pool and pops it out
@@ -281,11 +322,11 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     function claimRewards() external nonReentrant {
         address payable recipient = payable(msg.sender);
         require(playerBalances[msg.sender] > 0, "Balance is zero");
-        
+
         uint256 ethTransferAmount = playerBalances[msg.sender];
         playerBalances[msg.sender] = 0;
         (bool success, ) = recipient.call{value: ethTransferAmount}("");
-        require(success, "Transfer failed");    
+        require(success, "Transfer failed");
     }
 
     function _registerWagerAndSubFees(address player, uint256 wagerAmount) internal {
