@@ -54,7 +54,10 @@ contract PolymorphGeneParser {
         initMappings();
     }
 
-    function splitGeneToPairs(uint256 gene) public view returns (uint256[] memory) {
+    function splitGeneToPairs(uint256 gene)
+    internal
+    view
+    returns (uint256[] memory) {
         uint256 genes = gene.mod(10**(genePairsCount * 2)); // => 061151489786639768
         uint256[] memory genePairs = new uint256[](9);
         uint256 index = 0;
@@ -436,5 +439,6 @@ contract PolymorphGeneParser {
     }
 
     /// @notice Updates specific map item stats
-    function updateItemStats() public {}
+    //TODO:: do we need this method ?
+    function updateItemStats() internal {}
 }
