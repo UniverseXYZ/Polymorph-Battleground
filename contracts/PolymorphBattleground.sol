@@ -1,7 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./PolymorphWithGeneChanger.sol";
@@ -16,18 +15,12 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     address payable public daoAddress;
     address private linkAddress;
     address private wethAddress;
-    address private xyzAddress;
     IUniswapV3Router private uniswapV3Router;
     // TODO:: write docs
     // TODO:: Upon win/lose -> adjust owners balances
     // TODO:: claimRewards -> ?
     // TODO:: 6. We will keep track of the current processed roundId. (In order to know which battles to start next)
     // TODO:: 7. We don’t store records about polymorph wins or loses, all that kind of data will be emitted trough events and captured by the graph.
-
-    enum WagerCurrency {
-        XYZ,
-        ETH
-    }
 
     struct BattleEntitiy {
         bool inBattlePool; // Gets true upon added into the battle pool in enterBattle()
@@ -41,14 +34,9 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         uint256 lastBattleStats;
     }
 
-    struct Balance {
-        uint256 xyzBalance;
-        uint256 ethBalance;
-    }
-
     mapping(uint256 => BattleEntitiy) public polymorphs;
     mapping(bytes32 => uint256) public vrfIdtoMorphId;
-    mapping(address => Balance) public playerBalances;
+    mapping(address => uint256) public playerBalances;
     mapping(uint256 => uint256[]) public battlePools; // roundId => [22,23] polymorphs ids
     mapping(address => mapping(uint256 => BattleEntitiy)) public userEntities; // address => roundId => BattleEntity
     uint256[] public battlePool;
@@ -60,18 +48,49 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     uint256 public battlePoolIndex; // Current battle pool index to insert entities into
     uint256 private maxPoolSize = 2; // to be configurable
 
+    event LogBattleEntered(
+        uint256 polymorphId, 
+        uint256 skillType, 
+        address owner, 
+        uint256 time
+    );
+
+    event LogRoundExecuted(
+        uint256 roundIndex, 
+        uint256 time
+    );
+
+    event LogPolymorphsBattled(
+        uint256 firstPolymorphId, 
+        uint256 firstPolymorphStats, 
+        uint256 secondPolymorphId, 
+        uint256 secondPolymorphStats,
+        address winner,
+        uint256 time
+    );
+
+    event LogLinkExchanged(
+        uint256 amount,
+        uint256 time,
+        address initiator
+    );
+
+    event LogRewardsClaimed(
+        uint256 amount,
+        address claimer
+    );
+
     modifier onlyDAO() {
         require(msg.sender == daoAddress, "Not called from the dao");
         _;
     }
 
-    constructor(address _polymorphContractAddress, address payable _daoAddress, address _uniswapV3Router, address _linkAddress, address _wethAddress, address _xyzAddress) {
+    constructor(address _polymorphContractAddress, address payable _daoAddress, address _uniswapV3Router, address _linkAddress, address _wethAddress) {
         //TODO:: Add events
         polymorphsContractAddress = _polymorphContractAddress;
         daoAddress = _daoAddress;
         linkAddress = _linkAddress;
         wethAddress = _wethAddress;
-        xyzAddress = _xyzAddress;
         uniswapV3Router = IUniswapV3Router(_uniswapV3Router);
     }
 
@@ -266,21 +285,13 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
 
     /// @notice Claims the available balance of player
     function claimRewards() external nonReentrant {
-        Balance storage playerBalance = playerBalances[msg.sender];
         address payable recipient = payable(msg.sender);
-
-        if (playerBalance.xyzBalance > 0) {
-            uint256 xyzTransferAmount = playerBalance.xyzBalance;
-            playerBalance.xyzBalance = 0;
-            require(IERC20(xyzAddress).transferFrom(address(this), msg.sender, xyzTransferAmount), "Transfer failed");
-        }
-
-        if (playerBalance.ethBalance > 0) {
-            uint256 ethTransferAmount = playerBalance.ethBalance;
-            playerBalance.ethBalance = 0;
-            (bool success, ) = recipient.call{value: ethTransferAmount}("");
-            require(success, "Transfer failed");
-        }
+        require(playerBalances[msg.sender] > 0, "Balance is zero");
+        
+        uint256 ethTransferAmount = playerBalances[msg.sender];
+        playerBalances[msg.sender] = 0;
+        (bool success, ) = recipient.call{value: ethTransferAmount}("");
+        require(success, "Transfer failed");    
     }
 
     function _registerWagerAndSubFees(address player, uint256 wagerAmount) internal {
@@ -289,7 +300,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         uint256 wagerAfterfees = wagerAmount.sub(daoFee).sub(operationalFee);
 
         // Increment the player balance with the wager amount (after fees being deducted)
-        playerBalances[player].ethBalance = playerBalances[player].ethBalance.add(wagerAfterfees);
+        playerBalances[player] = playerBalances[player].add(wagerAfterfees);
     }
 
     /// @notice Subtracts predefined fee which will be used for covering fees for calling executeRound() and getting LINK for random number generation.
