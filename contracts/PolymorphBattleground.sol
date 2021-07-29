@@ -8,11 +8,6 @@ import "./PolymorphGeneParser.sol";
 import "./IUniswapV3Router.sol";
 import "./RandomConsumerNumber.sol";
 
-    // TODO:: Add logic for when we call battlePolymorphs to check if we have even or odd number of participants in the pool
-    // if we have odd number transfer the last one into the next pool
-    // what happens if the next pool gets filled super quick and we don't have enough space in int, push him in the next ?
-    // we should also remove him from the current pool
-
 contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, ReentrancyGuard {
     using SafeMath for uint256;
 
@@ -45,7 +40,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     uint256 public operationalFeeBps = 1000; // to be configurable
     uint256 public roundIndex; // Round index to be executed
     uint256 public battlePoolIndex; // Current battle pool index to insert entities into
-    uint256 private maxPoolSize = 100; // to be configurable
+    uint256 private maxPoolSize = 40;
     bool public inRound; // If the execution of a round has begun
 
     event LogBattleEntered(
@@ -160,7 +155,6 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     function battlePolymorphs()
         public
     {
-        //TODO:: If the pool is not even we should transfer the odd entity in the next pool
         require(battlePools[roundIndex].length >= 2, "Not enough polymorphs into the Battle Pool !");
         require(randomResult != 0 && lockExecuteRound, "Random result is 0");
 
@@ -240,15 +234,35 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
             randomResult = statsRandoms[1];
         }
 
-
-        // TODO:: handle the case if we have odd number of participants
-        if (battlePools[roundIndex].length == 1) {
-            // Push the polymoph into the new active pool
-            // Should we delete the entity from the mapping ? maybe no (additional gas fees)
-            // Create new entity and add it into the mapping for the next round
+        // Handle the case if the roundIndex == battlePoolIndex (this means that the battle is over and nobody has entered for new battles
+        // in order to create the next pool we have to increase the battlePoolIndex)
+        if (battlePoolIndex == roundIndex) {
+            battlePoolIndex = battlePoolIndex + 1;
         }
 
-        // TODO:: handle the case if the roundIndex == battlePoolIndex to increase the battbattlePoolIndex after the fight
+        // Handle the case if we have odd number of participants
+        if (battlePools[roundIndex].length == 1) {
+
+            uint256 newEntityId = battlePools[roundIndex][0];
+
+            // Pop the last remaining id
+            battlePools[roundIndex].pop();
+
+            // Copy the entity into the entities for the next pool
+            BattleEntitiy memory newEntity = entities[roundIndex][newEntityId];
+            // Check if the id is not already persistant in the next pool (this could happen if the user sells his polymoprh
+            // And the new owner enters the battle in that pool)
+            // In that case insert him in the next one, even if battlePoolIndex has not reached the index
+            if (entities[battlePoolIndex][newEntityId].id == 0) {
+                entities[battlePoolIndex][newEntityId] = newEntity;
+                battlePools[battlePoolIndex].push(newEntityId);
+                // Push the polymoph id into the new active pool
+            } else {
+                entities[battlePoolIndex + 1][newEntityId] = newEntity;
+                battlePools[battlePoolIndex + 1].push(newEntityId);
+            }
+
+        }
 
         // Reset randomResult
         randomResult = 0;
