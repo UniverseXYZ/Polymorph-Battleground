@@ -6,7 +6,15 @@ contract RandomNumberConsumer is VRFConsumerBase {
     bytes32 internal keyHash;
     uint256 internal fee;
     uint256 public randomResult;
+    uint256 public poolsCount; // TODO:: change to internal
     bool internal lockExecuteRound;
+
+    mapping(uint256 => WagerPoolRandoms) public wagerPoolsRandomNumbers;
+
+    struct WagerPoolRandoms {
+        uint256 randomNumber;
+        uint256 wager;
+    }
 
     /**
      * Constructor inherits VRFConsumerBase
@@ -17,15 +25,30 @@ contract RandomNumberConsumer is VRFConsumerBase {
      * Key Hash: 0x2ed0feb3e7fd2022120aa84fab1945545a9f2ffc9076fd6156fa96eaff4c1311
      */
      // TODO:: those should be moved into .env ??
-    constructor()
+    constructor(uint256[] memory pools)
         VRFConsumerBase(
             0xb3dCcb4Cf7a26f6cf6B120Cf5A73875B7BBc655B, // VRF Coordinator
             0x01BE23585060835E02B77ef475b0Cc51aA1e0709  // LINK Token
         ) public
     {
+        require(pools.length != 0, "You must pass wager pools");
         keyHash = 0x2ed0feb3e7fd2022120aa84fab1945545a9f2ffc9076fd6156fa96eaff4c1311;
         fee = 0.1 * 10 ** 18; // 0.1 LINK
+        poolsCount = pools.length;
+        initPoolsRandomNumbers(pools);
     }
+
+    function initPoolsRandomNumbers(uint256[] memory pools) internal {
+        for(uint256 i = 0; i <= pools.length - 1; i++) {
+            uint256 poolWager = pools[i];
+            WagerPoolRandoms memory randoms = WagerPoolRandoms({
+                wager: poolWager,
+                randomNumber: 0
+            });
+            wagerPoolsRandomNumbers[i] = randoms;
+        }
+    }
+
 
     /**
      * Requests randomness
@@ -40,6 +63,11 @@ contract RandomNumberConsumer is VRFConsumerBase {
      */
     function fulfillRandomness(bytes32 requestId, uint256 randomness) internal virtual override {
         randomResult = randomness;
+        uint256[] memory randoms = expand(randomness, poolsCount);
+        for (uint256 i = 0; i <= randoms.length - 1; i++) {
+            WagerPoolRandoms storage wagerPoolRandom = wagerPoolsRandomNumbers[i];
+            wagerPoolRandom.randomNumber = randoms[i];
+        }
     }
 
     /**

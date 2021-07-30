@@ -19,7 +19,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     IUniswapV3Router private uniswapV3Router;
     // TODO:: write docs
     // TODO:: 7. We don’t store records about polymorph wins or loses, all that kind of data will be emitted trough events and captured by the graph.
-
+    // TODO:: Emit winner and losser id after battles
     struct BattleEntitiy {
         uint256 id;
         uint256 statsMin;
@@ -42,6 +42,19 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     uint256 public battlePoolIndex; // Current battle pool index to insert entities into
     uint256 private maxPoolSize = 40;
     bool public inRound; // If the execution of a round has begun
+
+    // BattlePolymorphs is going to execute a specific wager pool ex. 1ETHPool ?
+    // We should call BattlePolymorphs and pass which pool to execute ?
+    // Upon entering the battle we should check the wager and decide in which pool to put the participant
+    // TODO:: integrate the new data structures from below
+    mapping(uint256 => WagerPool) public wagerPools;
+
+    struct WagerPool {
+        uint256 wager; // Required wager to enter the pool
+        uint256 roundId; // To round be executed
+        uint256 batllepoolIndex; // Battle pool index to insert players into
+        mapping(uint256 => uint256[]) battlePools;
+    }
 
     event LogBattleEntered(
         uint256 polymorphId,
@@ -80,8 +93,21 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         _;
     }
 
-    constructor(address _polymorphContractAddress, address payable _daoAddress, address _uniswapV3Router, address _linkAddress, address _wethAddress, uint256 _daoFeeBps, uint256 _operationalFeeBps, uint256 _rngChainlinkCost) {
+    constructor(
+        address _polymorphContractAddress,
+        address payable _daoAddress,
+        address _uniswapV3Router,
+        address _linkAddress,
+        address _wethAddress,
+        uint256 _daoFeeBps,
+        uint256 _operationalFeeBps,
+        uint256 _rngChainlinkCost,
+        uint256[] memory pools
+        )
+        RandomNumberConsumer(pools)
+    {
         //TODO:: Add events
+        require(pools.length != 0, "You must pass wager pools");
         polymorphsContractAddress = _polymorphContractAddress;
         daoAddress = _daoAddress;
         linkAddress = _linkAddress;
@@ -90,6 +116,15 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         daoFeeBps = _daoFeeBps;
         operationalFeeBps = _operationalFeeBps;
         rngChainlinkCost = _rngChainlinkCost;
+        initWagerPools(pools);
+    }
+
+    function initWagerPools(uint256[] memory pools) internal {
+        for(uint256 i = 0; i <= pools.length - 1; i++) {
+            uint256 wager = pools[i];
+            WagerPool storage wagerPool = wagerPools[wager];
+            wagerPool.wager = wager;
+        }
     }
 
     /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the pool.
@@ -105,6 +140,8 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
 
         // Handle owner already registered for the battlePoolIndex
         require(entities[battlePoolIndex][polymorphId].id == 0, "You have already registered for the current battle pool");
+
+        // TODO:: decide in which pool the player shall enter the battles
 
         // Deducts the required fees and registers the wager balance to the player
         uint256 wagerAfterfees = _getWagerAfterFees(msg.value);
