@@ -31,5 +31,11 @@ export LINK_ADDRESS=''
 # WETH (Wrapped Ether) address
 export WETH_ADDRESS=''
 
-# XYZ Token address
-export XYZ_ADDRESS=''
+# DAO FEE BPS
+export DAO_FEE_BPS=''
+
+# OPERATIONAL FEE BPS
+export OPERATIONAL_FEE_BPS=''
+
+# CHAIN LINK RNG GCOST
+export LINK_COST=''

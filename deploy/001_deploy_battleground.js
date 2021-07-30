@@ -18,13 +18,15 @@ module.exports = async function () {
     const UNISWAP_SWAP_ROUTER_ADDRESS = process.env.UNISWAP_SWAP_ROUTER_ADDRESS;
     const LINK_ADDRESS = process.env.LINK_ADDRESS;
     const WETH_ADDRESS = process.env.WETH_ADDRESS;
-    const XYZ_ADDRESS = process.env.XYZ_ADDRESS;
+    const DAO_FEE_BPS = process.env.DAO_FEE_BPS;
+    const OPERATIONAL_FEE_BPS = process.env.OPERATIONAL_FEE_BPS;
+    const LINK_COST = process.env.LINK_COST;
 
     if (!Battleground) {
 
       const polymorphBattlegroundDeployment = await deployments.deploy("PolymorphBattleground", {
         from: namedAccounts.deployer,
-        args: [POLYMORPHS_CONTRACT_ADDRESS, DAO_ADDRESS, UNISWAP_SWAP_ROUTER_ADDRESS, LINK_ADDRESS, WETH_ADDRESS, XYZ_ADDRESS],
+        args: [POLYMORPHS_CONTRACT_ADDRESS, DAO_ADDRESS, UNISWAP_SWAP_ROUTER_ADDRESS, LINK_ADDRESS, WETH_ADDRESS, DAO_FEE_BPS, OPERATIONAL_FEE_BPS, LINK_COST],
       });
 
       console.log("PolymorphBattleground deployed to:", polymorphBattlegroundDeployment.address);

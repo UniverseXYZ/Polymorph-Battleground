@@ -35,9 +35,9 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     mapping(uint256 => uint256[]) public battlePools; // roundId => [22,23] polymorphs ids
     mapping(uint256 => mapping(uint256 => BattleEntitiy)) public entities; // battlePoolIndex => polymorphId => BattleEntity
     uint256 private enterFee = 0.1 ether;
-    uint256 public daoFeeBps = 1000; // to be configurable
-    uint256 public operationalFeeBps = 1000; // to be configurable
-    uint256 public rngChainlinkCost = 100000000000000000; // to be configurable
+    uint256 public daoFeeBps;
+    uint256 public operationalFeeBps;
+    uint256 public rngChainlinkCost;
     uint256 public roundIndex; // Round index to be executed
     uint256 public battlePoolIndex; // Current battle pool index to insert entities into
     uint256 private maxPoolSize = 40;
@@ -80,13 +80,16 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         _;
     }
 
-    constructor(address _polymorphContractAddress, address payable _daoAddress, address _uniswapV3Router, address _linkAddress, address _wethAddress) {
+    constructor(address _polymorphContractAddress, address payable _daoAddress, address _uniswapV3Router, address _linkAddress, address _wethAddress, uint256 _daoFeeBps, uint256 _operationalFeeBps, uint256 _rngChainlinkCost) {
         //TODO:: Add events
         polymorphsContractAddress = _polymorphContractAddress;
         daoAddress = _daoAddress;
         linkAddress = _linkAddress;
         wethAddress = _wethAddress;
         uniswapV3Router = IUniswapV3Router(_uniswapV3Router);
+        daoFeeBps = _daoFeeBps;
+        operationalFeeBps = _operationalFeeBps;
+        rngChainlinkCost = _rngChainlinkCost;
     }
 
     /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the pool.
@@ -354,12 +357,6 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         uniswapV3Router.refundETH();
 
         emit LogLinkExchanged(linkAmount, block.timestamp, msg.sender);
-    }
-
-    /// @notice Updates the player balance reward after finished battle
-    /// @param player - The address of the player
-    function upadteRewardBalance(address player) internal {
-        // TODO :: update the playerBalances mapping
     }
 
     /// @notice Claims the available balance of player
