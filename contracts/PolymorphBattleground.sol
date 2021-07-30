@@ -1,6 +1,7 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./PolymorphWithGeneChanger.sol";
@@ -17,7 +18,6 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     address private wethAddress;
     IUniswapV3Router private uniswapV3Router;
     // TODO:: write docs
-    // TODO:: claimRewards -> ?
     // TODO:: 7. We don’t store records about polymorph wins or loses, all that kind of data will be emitted trough events and captured by the graph.
 
     struct BattleEntitiy {
@@ -37,6 +37,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     uint256 private enterFee = 0.1 ether;
     uint256 public daoFeeBps = 1000; // to be configurable
     uint256 public operationalFeeBps = 1000; // to be configurable
+    uint256 public rngChainlinkCost = 100000000000000000; // to be configurable
     uint256 public roundIndex; // Round index to be executed
     uint256 public battlePoolIndex; // Current battle pool index to insert entities into
     uint256 private maxPoolSize = 40;
@@ -144,9 +145,19 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
 
     /// @notice Backend (like Openzeppelin Defender) will call this function periodically
     /// It will pull two random polymorphs from the battle pool using the Chainlink VRF
-    function executeRound() external {
+    /// @param ethAmount ETH amount which will be used to swap for LINK
+    function executeRound(uint256 ethAmount) external {
         require(!lockExecuteRound, "Round execution has been locked !");
         lockExecuteRound = true;
+
+        IERC20 chainlinkToken = IERC20(linkAddress);
+        uint256 chainlinkBalance = chainlinkToken.balanceOf(address(this));
+        
+        // Check if there is enough LINK and if not, call Uniswap to swap ETH for LINK
+        if (chainlinkBalance < rngChainlinkCost) {
+            getLinkForRNGCosts(rngChainlinkCost, ethAmount);
+        }
+
         getRandomNumber();
     }
 
@@ -313,8 +324,9 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
 
     /// @notice converts it to LINK, so costs can be coverd for RNG generation
     /// @param linkAmount Exact LINK(Chainlink) amount to swap
-    function getLinkForRNGCosts(uint256 linkAmount) public payable {
-        require(msg.value > 0, "Must pass non 0 ETH amount");
+    /// @param ethAmount ETH amount to swap for link - difference is refunded
+    function getLinkForRNGCosts(uint256 linkAmount, uint256 ethAmount) internal nonReentrant {
+        require(ethAmount > 0, "Must pass non 0 ETH amount");
         require(linkAmount > 0, "Must pass non 0 LINK amount");
 
         uint256 deadline = block.timestamp + 60;
@@ -323,7 +335,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         uint24 fee = 3000;
         address recipient = address(this);
         uint256 amountOut = linkAmount;
-        uint256 amountInMaximum = msg.value;
+        uint256 amountInMaximum = ethAmount;
         uint160 sqrtPriceLimitX96 = 0;
 
         ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter.ExactOutputSingleParams(
@@ -337,12 +349,11 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
             sqrtPriceLimitX96
         );
 
-        uniswapV3Router.exactOutputSingle{ value: msg.value }(params);
+        uniswapV3Router.exactOutputSingle{ value: ethAmount }(params);
+        // refund leftover ETH to user
         uniswapV3Router.refundETH();
 
-        // refund leftover ETH to user
-        (bool success,) = msg.sender.call{ value: address(this).balance }("");
-        require(success, "Refund Failed");
+        emit LogLinkExchanged(linkAmount, block.timestamp, msg.sender);
     }
 
     /// @notice Updates the player balance reward after finished battle
@@ -360,10 +371,13 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         playerBalances[msg.sender] = 0;
         (bool success, ) = recipient.call{value: ethTransferAmount}("");
         require(success, "Transfer failed");
+
+        emit LogRewardsClaimed(ethTransferAmount, msg.sender);
     }
 
     function _getWagerAfterFees(uint256 wagerAmount)
     internal
+    view
     returns(uint256)
     {
         uint256 daoFee = _calculateDAOfee(wagerAmount, daoFeeBps);
