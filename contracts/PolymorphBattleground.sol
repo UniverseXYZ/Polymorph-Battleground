@@ -31,34 +31,29 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         uint256 lastBattleStats;
     }
 
+    struct WagerPool {
+        uint256 wager; // Required wager to enter the pool
+        uint256 roundIndex; // To round be executed
+        uint256 battlePoolIndex; // Battle pool index to insert players into
+        uint256 poolIndex; // Assign pool index so that we can later access the random numbers
+        mapping(uint256 => uint256[]) battlePools; // battlePoolIndex => [22,23] polymorphs ids
+        bool inRound; // If the execution of a round has begun
+    }
+
     mapping(address => uint256) public playerBalances;
-    mapping(uint256 => uint256[]) public battlePools; // roundId => [22,23] polymorphs ids
-    mapping(uint256 => mapping(uint256 => BattleEntitiy)) public entities; // battlePoolIndex => polymorphId => BattleEntity
+    mapping(uint256 => mapping(uint256 => mapping(uint256 => BattleEntitiy))) public entities; //wager => battlePoolIndex => polymorphId => BattleEntity
+    mapping(uint256 => WagerPool) public wagerPools;
+
     uint256 private enterFee = 0.1 ether;
     uint256 public daoFeeBps;
     uint256 public operationalFeeBps;
     uint256 public rngChainlinkCost;
-    uint256 public roundIndex; // Round index to be executed
-    uint256 public battlePoolIndex; // Current battle pool index to insert entities into
     uint256 private maxPoolSize = 40;
-    bool public inRound; // If the execution of a round has begun
-
-    // BattlePolymorphs is going to execute a specific wager pool ex. 1ETHPool ?
-    // We should call BattlePolymorphs and pass which pool to execute ?
-    // Upon entering the battle we should check the wager and decide in which pool to put the participant
-    // TODO:: integrate the new data structures from below
-    mapping(uint256 => WagerPool) public wagerPools;
-
-    struct WagerPool {
-        uint256 wager; // Required wager to enter the pool
-        uint256 roundId; // To round be executed
-        uint256 batllepoolIndex; // Battle pool index to insert players into
-        mapping(uint256 => uint256[]) battlePools;
-    }
 
     event LogBattleEntered(
         uint256 polymorphId,
         uint256 skillType,
+        uint256 poolWager,
         address owner,
         uint256 time
     );
@@ -124,6 +119,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
             uint256 wager = pools[i];
             WagerPool storage wagerPool = wagerPools[wager];
             wagerPool.wager = wager;
+            wagerPool.poolIndex = i;
         }
     }
 
@@ -136,12 +132,13 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     {
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         require(polymorphsContract.ownerOf(polymorphId) == msg.sender, "You must be the owner of the polymorph");
-        require(msg.value >= enterFee, "The sended fee is not enough !");
+
+        WagerPool storage wagerPool = wagerPools[msg.value];
+        require(wagerPool.wager != 0, "There is no such wager pool !");
 
         // Handle owner already registered for the battlePoolIndex
-        require(entities[battlePoolIndex][polymorphId].id == 0, "You have already registered for the current battle pool");
-
-        // TODO:: decide in which pool the player shall enter the battles
+        BattleEntitiy storage entity = entities[wagerPool.wager][wagerPool.battlePoolIndex][polymorphId];
+        require(entity.id == 0, "You have already registered for the current battle pool");
 
         // Deducts the required fees and registers the wager balance to the player
         uint256 wagerAfterfees = _getWagerAfterFees(msg.value);
@@ -151,34 +148,30 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         // Handle pool overflow by increasing the current battlePoolIndex so we can start fulfilling the next pool
         // Handle started pool fight with left open slots, fullfil the next pool
         if (
-            battlePools[battlePoolIndex].length == maxPoolSize ||
-            inRound && battlePoolIndex == roundIndex
-            ) battlePoolIndex = battlePoolIndex + 1;
+            wagerPool.battlePools[wagerPool.battlePoolIndex].length == maxPoolSize ||
+            wagerPool.inRound && wagerPool.battlePoolIndex == wagerPool.roundIndex
+            ) wagerPool.battlePoolIndex = wagerPool.battlePoolIndex + 1;
 
         (uint256 min, uint256 max) = getStatsPoints(polymorphId, skillType);
 
-        // Create or update an entity in the polymorphs mapping
-        BattleEntitiy memory entitiy = BattleEntitiy({
-            id: polymorphId,
-            statsMin: min,
-            statsMax: max,
-            skillType: skillType,
-            owner: msg.sender,
-            wins: 0,
-            loses: 0,
-            lastBattleStats: 0
-        });
-
-        // Insert into the userEntities => for that pool index the user will fight with this polymoprh
-        entities[battlePoolIndex][polymorphId] = entitiy;
+        // Update the entity
+        entity.id = polymorphId;
+        entity.statsMin = min;
+        entity.statsMax = max;
+        entity.skillType = skillType;
+        entity.owner = msg.sender;
+        entity.wins = 0;
+        entity.loses = 0;
+        entity.lastBattleStats = 0;
 
         // 6. Enter the battlePools with the polymorphId
-        battlePools[battlePoolIndex].push(polymorphId);
+        wagerPool.battlePools[wagerPool.battlePoolIndex].push(polymorphId);
 
         emit LogBattleEntered(
             polymorphId,
             skillType,
-            entitiy.owner,
+            wagerPool.wager,
+            entity.owner,
             block.timestamp
         );
     }
@@ -187,12 +180,9 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     /// It will pull two random polymorphs from the battle pool using the Chainlink VRF
     /// @param ethAmount ETH amount which will be used to swap for LINK
     function executeRound(uint256 ethAmount) external {
-        require(!lockExecuteRound, "Round execution has been locked !");
-        lockExecuteRound = true;
-
         IERC20 chainlinkToken = IERC20(linkAddress);
         uint256 chainlinkBalance = chainlinkToken.balanceOf(address(this));
-        
+
         // Check if there is enough LINK and if not, call Uniswap to swap ETH for LINK
         if (chainlinkBalance < rngChainlinkCost) {
             getLinkForRNGCosts(rngChainlinkCost, ethAmount);
@@ -211,36 +201,39 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     }
 
     /// @notice The actual battle calculation where the comparison happens
-    function battlePolymorphs()
+    function battlePolymorphs(uint256 wager)
         public
     {
-        require(battlePools[roundIndex].length >= 2, "Not enough polymorphs into the Battle Pool !");
-        require(randomResult != 0 && lockExecuteRound, "Random result is 0");
+        WagerPool storage wagerPool = wagerPools[wager];
+        require(wagerPool.wager != 0, "There is no such wager pool !");
+        require(wagerPool.battlePools[wagerPool.roundIndex].length >= 2, "Not enough polymorphs into the Wager Battle Pool !");
+        require(wagerPoolsRandomNumbers[wagerPool.poolIndex].randomNumber != 0, "Random result is for that wager pool is 0 !");
 
         // Indicate that a round has started, so no new entries cant be accepted in the fight pool
-        inRound = true;
+        wagerPool.inRound = true;
 
-        while(battlePools[roundIndex].length >= 2) {
+        while(wagerPool.battlePools[wagerPool.roundIndex].length >= 2) {
             // Take random numbers for picking opponents
-            uint256[] memory randoms = expand(randomResult, 2);
+            uint256[] memory randoms = expand(wagerPoolsRandomNumbers[wagerPool.poolIndex].randomNumber, 2);
 
             // Take a random index between 0 and the current pool range
-            uint256 first = randoms[0] % (battlePools[roundIndex].length - 1);
-            uint256 firstId = battlePools[roundIndex][first];
-            BattleEntitiy storage entitiy = entities[roundIndex][firstId];
+            uint256 first = randoms[0] % (wagerPool.battlePools[wagerPool.roundIndex].length - 1);
+            uint256 firstId = wagerPool.battlePools[wagerPool.roundIndex][first];
+            BattleEntitiy storage entitiy = entities[wagerPool.wager][wagerPool.battlePoolIndex][firstId];
 
             // Move the polymorph to the end of the array and pop it
-            swapAndPopEntity(first);
+            swapAndPopEntity(first, wager);
 
             // Take second random number from the range
+            // TODO:: turn this to ternary operator
             uint256 second;
-            if (battlePools[roundIndex].length - 1 < 1) second = randoms[1] % 1; // if the length is 1 we should take 1 otherwise number % 0 = NaN
-            else second = randoms[1] % (battlePools[roundIndex].length - 1);
-            uint256 secondId = battlePools[roundIndex][second];
-            BattleEntitiy storage entitiy2 = entities[roundIndex][secondId];
+            if (wagerPool.battlePools[wagerPool.roundIndex].length - 1 < 1) second = randoms[1] % 1; // if the length is 1 we should take 1 otherwise number % 0 = NaN
+            else second = randoms[1] % (wagerPool.battlePools[wagerPool.roundIndex].length - 1);
+            uint256 secondId = wagerPool.battlePools[wagerPool.roundIndex][second];
+            BattleEntitiy storage entitiy2 = entities[wagerPool.wager][wagerPool.battlePoolIndex][secondId];
 
             // Move the polymorph to the end of the array and pop it
-            swapAndPopEntity(second);
+            swapAndPopEntity(second, wager);
 
             // Take random numbers for stats calculations
             uint256[] memory statsRandoms = expand(randoms[1], 2);
@@ -305,61 +298,61 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
 
         // Handle the case if the roundIndex == battlePoolIndex (this means that the battle is over and nobody has entered for new battles
         // in order to create the next pool we have to increase the battlePoolIndex)
-        if (battlePoolIndex == roundIndex) {
-            battlePoolIndex = battlePoolIndex + 1;
+        if (wagerPool.battlePoolIndex == wagerPool.roundIndex) {
+            wagerPool.battlePoolIndex = battlePoolIndex + 1;
         }
 
         // Handle the case if we have odd number of participants
-        if (battlePools[roundIndex].length == 1) {
+        if (wagerPool.battlePools[wagerPool.roundIndex].length == 1) {
 
-            uint256 newEntityId = battlePools[roundIndex][0];
+            uint256 newEntityId = wagerPool.battlePools[wagerPool.roundIndex][0];
 
             // Pop the last remaining id
-            battlePools[roundIndex].pop();
+            wagerPool.battlePools[wagerPool.roundIndex].pop();
 
             // Copy the entity into the entities for the next pool
-            BattleEntitiy memory newEntity = entities[roundIndex][newEntityId];
+            BattleEntitiy memory newEntity = entities[wagerPool.wager][wagerPool.battlePoolIndex][newEntityId];
             // Check if the id is not already persistant in the next pool (this could happen if the user sells his polymoprh
             // And the new owner enters the battle in that pool)
             // In that case insert him in the next one, even if battlePoolIndex has not reached the index
-            if (entities[battlePoolIndex][newEntityId].id == 0) {
-                entities[battlePoolIndex][newEntityId] = newEntity;
-                battlePools[battlePoolIndex].push(newEntityId);
+            if (entities[wagerPool.wager][wagerPool.battlePoolIndex][newEntityId].id == 0) {
+                entities[wagerPool.wager][wagerPool.battlePoolIndex][newEntityId] = newEntity;
+                wagerPool.battlePools[wagerPool.battlePoolIndex].push(newEntityId);
                 // Push the polymoph id into the new active pool
             } else {
-                entities[battlePoolIndex + 1][newEntityId] = newEntity;
-                battlePools[battlePoolIndex + 1].push(newEntityId);
+                entities[wagerPool.wager][wagerPool.battlePoolIndex + 1][newEntityId] = newEntity;
+                wagerPool.battlePools[wagerPool.battlePoolIndex + 1].push(newEntityId);
             }
 
         }
 
-        // Reset randomResult
-        randomResult = 0;
-
-        // Allow executeRound
-        lockExecuteRound = false;
+        // Reset randomNumber for that wager pool
+        wagerPoolsRandomNumbers[wagerPool.poolIndex].randomNumber = 0;
 
         // Increase the round index
-        emit LogRoundExecuted(roundIndex, block.timestamp);
-        roundIndex = roundIndex + 1;
+        // TODO:: emit more data here ?
+        emit LogRoundExecuted(wagerPool.roundIndex, block.timestamp);
+        wagerPool.roundIndex = wagerPool.roundIndex + 1;
 
         // Indicate that the fight round has finished
-        inRound = false;
+        wagerPool.inRound = false;
     }
 
     /// @notice Moves battle entity to the end of the pool and pops it out
-    function swapAndPopEntity(uint256 polymoprhIndex) private {
+    function swapAndPopEntity(uint256 polymoprhIndex, uint256 wager) private {
+        WagerPool storage wagerPool = wagerPools[wager];
+
         // If its not already the last element
-        if (polymoprhIndex != battlePools[roundIndex].length - 1) {
-            uint256 temp = battlePools[roundIndex][battlePools[roundIndex].length - 1];
-            uint256 curr = battlePools[roundIndex][polymoprhIndex];
+        if (polymoprhIndex != wagerPool.battlePools[wagerPool.roundIndex].length - 1) {
+            uint256 last = wagerPool.battlePools[wagerPool.roundIndex][wagerPool.battlePools[wagerPool.roundIndex].length - 1];
+            uint256 curr = wagerPool.battlePools[wagerPool.roundIndex][polymoprhIndex];
             // Move the current to the end
-            battlePools[roundIndex][battlePools[roundIndex].length - 1] = curr;
+            wagerPool.battlePools[wagerPool.roundIndex][wagerPool.battlePools[wagerPool.roundIndex].length - 1] = curr;
             // Put the last one on the current place
-            battlePools[roundIndex][polymoprhIndex] = temp;
+            wagerPool.battlePools[wagerPool.roundIndex][polymoprhIndex] = last;
         }
         // Remove the element
-        battlePools[roundIndex].pop();
+        wagerPool.battlePools[wagerPool.roundIndex].pop();
     }
 
     /// @notice converts it to LINK, so costs can be coverd for RNG generation

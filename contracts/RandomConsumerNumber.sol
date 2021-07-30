@@ -7,7 +7,6 @@ contract RandomNumberConsumer is VRFConsumerBase {
     uint256 internal fee;
     uint256 public randomResult;
     uint256 public poolsCount; // TODO:: change to internal
-    bool internal lockExecuteRound;
 
     mapping(uint256 => WagerPoolRandoms) public wagerPoolsRandomNumbers;
 
