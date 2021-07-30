@@ -17,7 +17,6 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     address private wethAddress;
     IUniswapV3Router private uniswapV3Router;
     // TODO:: write docs
-    // TODO:: Upon win/lose -> adjust owners balances
     // TODO:: claimRewards -> ?
     // TODO:: 7. We don’t store records about polymorph wins or loses, all that kind of data will be emitted trough events and captured by the graph.
 
@@ -104,7 +103,9 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         require(entities[battlePoolIndex][polymorphId].id == 0, "You have already registered for the current battle pool");
 
         // Deducts the required fees and registers the wager balance to the player
-        _registerWagerAndSubFees(msg.sender, msg.value);
+        uint256 wagerAfterfees = _getWagerAfterFees(msg.value);
+        // Increment the player balance with the wager amount (after fees being deducted)
+        playerBalances[msg.sender] = playerBalances[msg.sender].add(wagerAfterfees);
 
         // Handle pool overflow by increasing the current battlePoolIndex so we can start fulfilling the next pool
         // Handle started pool fight with left open slots, fullfil the next pool
@@ -199,16 +200,19 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
 
             // winner
             address winner;
+            address loser;
             if (statsFirst > statsSecond) {
                 entitiy.wins = entitiy.wins + 1;
                 entitiy2.loses = entitiy2.loses + 1;
                 winner = entitiy.owner;
+                loser = entitiy2.owner;
             }
 
             if (statsSecond > statsFirst) {
                 entitiy.loses = entitiy.loses + 1;
                 entitiy2.wins = entitiy2.wins + 1;
                 winner = entitiy2.owner;
+                loser = entitiy.owner;
             }
 
             // Equal stats case, select the winner based on the random numbers used for forming the stats
@@ -217,12 +221,19 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
                     entitiy.wins = entitiy.wins + 1;
                     entitiy2.loses = entitiy2.loses + 1;
                     winner = entitiy.owner;
+                    loser = entitiy2.owner;
                 } else {
                     entitiy.loses = entitiy.loses + 1;
                     entitiy2.wins = entitiy2.wins + 1;
                     winner = entitiy2.owner;
+                    loser = entitiy.owner;
                 }
             }
+
+            // Calculate the wager after fees and add it to the winner, substract it from the loser
+            uint256 wagerAfterfees = _getWagerAfterFees(enterFee);
+            playerBalances[winner] = playerBalances[winner].add(wagerAfterfees);
+            playerBalances[loser] = playerBalances[loser].sub(wagerAfterfees);
 
             // // Save last stats points
             entitiy.lastBattleStats = statsFirst;
@@ -351,13 +362,14 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         require(success, "Transfer failed");
     }
 
-    function _registerWagerAndSubFees(address player, uint256 wagerAmount) internal {
+    function _getWagerAfterFees(uint256 wagerAmount)
+    internal
+    returns(uint256)
+    {
         uint256 daoFee = _calculateDAOfee(wagerAmount, daoFeeBps);
         uint256 operationalFee = _calculateOperationalFees(wagerAmount, operationalFeeBps);
         uint256 wagerAfterfees = wagerAmount.sub(daoFee).sub(operationalFee);
-
-        // Increment the player balance with the wager amount (after fees being deducted)
-        playerBalances[player] = playerBalances[player].add(wagerAfterfees);
+        return wagerAfterfees;
     }
 
     /// @notice Subtracts predefined fee which will be used for covering fees for calling executeRound() and getting LINK for random number generation.
