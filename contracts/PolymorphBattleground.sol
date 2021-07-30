@@ -132,6 +132,13 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
 
         // 6. Enter the battlePools with the polymorphId
         battlePools[battlePoolIndex].push(polymorphId);
+
+        emit LogBattleEntered(
+            polymorphId,
+            skillType,
+            entitiy.owner,
+            block.timestamp
+        );
     }
 
     /// @notice Backend (like Openzeppelin Defender) will call this function periodically
@@ -271,6 +278,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         lockExecuteRound = false;
 
         // Increase the round index
+        emit LogRoundExecuted(roundIndex, block.timestamp);
         roundIndex = roundIndex + 1;
 
         // Indicate that the fight round has finished
