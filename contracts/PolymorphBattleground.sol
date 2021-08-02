@@ -9,8 +9,7 @@ import "./PolymorphGeneParser.sol";
 import "./IUniswapV3Router.sol";
 import "./RandomConsumerNumber.sol";
 
-// TODO:: write docs
-// TODO:: 7. We don’t store records about polymorph wins or loses, all that kind of data will be emitted trough events and captured by the graph.
+// TODO:: Don’t store records about polymorph wins or loses, all that kind of data will be emitted trough events and captured by the graph.
 
 contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, ReentrancyGuard {
     using SafeMath for uint256;
@@ -114,6 +113,8 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         initWagerPools(pools);
     }
 
+    /// @notice The game will have different wager pools for example (0.1ETH, 0.2ETH and etc..) the wager will be presented in wei
+    /// @param pools An array with wagers in wei [1000000000000000, 2000000000000000, 3000000000000000]
     function initWagerPools(uint256[] memory pools) internal {
         for(uint256 i = 0; i <= pools.length - 1; i++) {
             uint256 wager = pools[i];
@@ -123,7 +124,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         }
     }
 
-    /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the pool.
+    /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the desired wager pool.
     /// @param polymorphId Id of the polymorph
     /// @param skillType Attack or Defence
     function enterBattle(uint256 polymorphId, uint256 skillType)
@@ -177,7 +178,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
     }
 
     /// @notice Backend (like Openzeppelin Defender) will call this function periodically
-    /// It will pull two random polymorphs from the battle pool using the Chainlink VRF
+    /// It will make request for a random number using the Chainlink VRF
     /// @param ethAmount ETH amount which will be used to swap for LINK
     function executeRound(uint256 ethAmount) external {
         IERC20 chainlinkToken = IERC20(linkAddress);
@@ -191,7 +192,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         getRandomNumber();
     }
 
-    /// @notice Calculates the attack score of the polymorph based on its gene
+    /// @notice Calculates the stats score range of the polymorph based on its gene for example (50 - 75)
     /// @param polymorphId Id of the polymorph
     function getStatsPoints(uint256 polymorphId, uint256 skillType) private view returns (uint256 min, uint256 max) {
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
@@ -279,7 +280,7 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
             playerBalances[winner] = playerBalances[winner].add(wagerAfterfees);
             playerBalances[loser] = playerBalances[loser].sub(wagerAfterfees);
 
-            // // Save last stats points
+            // Save last stats points
             entity.lastBattleStats = statsFirst;
             entity2.lastBattleStats = statsSecond;
 
@@ -401,6 +402,9 @@ contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, Ree
         emit LogRewardsClaimed(ethTransferAmount, msg.sender);
     }
 
+    /// @notice Calculates the wager after deducted fees
+    /// @param wagerAmount the amount of wager to calculate for
+    /// @return the wager after the fees deduction
     function _getWagerAfterFees(uint256 wagerAmount)
     internal
     view

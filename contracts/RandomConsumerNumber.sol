@@ -8,7 +8,7 @@ contract RandomNumberConsumer is VRFConsumerBase {
     uint256 public randomResult;
     uint256 internal poolsCount;
 
-    mapping(uint256 => WagerPoolRandoms) public wagerPoolsRandomNumbers;
+    mapping(uint256 => WagerPoolRandoms) public wagerPoolsRandomNumbers; // index => WagerPoolRandoms
 
     struct WagerPoolRandoms {
         uint256 randomNumber;
@@ -37,6 +37,9 @@ contract RandomNumberConsumer is VRFConsumerBase {
         initPoolsRandomNumbers(pools);
     }
 
+    /// @notice For every wager in the pools [] instantiate WagerPoolRandoms which will hold the random number for the particular wager pool
+    /// @notice so that we can use those randoms later when we conduct the battles for particular wager pool
+    /// @param pools An array with wagers in wei [1000000000000000, 2000000000000000, 3000000000000000]
     function initPoolsRandomNumbers(uint256[] memory pools) internal {
         for(uint256 i = 0; i <= pools.length - 1; i++) {
             uint256 poolWager = pools[i];
