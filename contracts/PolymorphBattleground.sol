@@ -5,13 +5,13 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./PolymorphWithGeneChanger.sol";
-import "./PolymorphGeneParser.sol";
+import "./BattleStatsCalculator.sol";
 import "./IUniswapV3Router.sol";
 import "./RandomConsumerNumber.sol";
 
 // TODO:: Don’t store records about polymorph wins or loses, all that kind of data will be emitted trough events and captured by the graph.
 
-contract PolymorphBattleground is PolymorphGeneParser, RandomNumberConsumer, ReentrancyGuard {
+contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, ReentrancyGuard {
     using SafeMath for uint256;
 
     address private polymorphsContractAddress;
