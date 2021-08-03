@@ -67,7 +67,7 @@ contract BattleStatsCalculator {
     function addItemToMapping(uint8 geneIndex, uint8 itemIndex, uint256 aMin, uint256 aMax, uint256 dMin, uint256 dMax) internal {}
 
     /// @notice in the future we may want to increase the gene pairs count in order to add include new parts from the body (for example neck)
-    function setGenesPairsCount() internal {}
+    function setGenesPairsCount(uint8 count) internal {}
 
     function initItems() internal {
         // Footwear
