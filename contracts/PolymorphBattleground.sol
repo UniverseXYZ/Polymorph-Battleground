@@ -1,22 +1,19 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./PolymorphWithGeneChanger.sol";
 import "./BattleStatsCalculator.sol";
-import "./IUniswapV3Router.sol";
 import "./RandomConsumerNumber.sol";
+import "./FeesCalculator.sol";
+import "./FundLink.sol";
 
-contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, ReentrancyGuard {
+contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomNumberConsumer, ReentrancyGuard, FundLink {
     using SafeMath for uint256;
 
     address private polymorphsContractAddress;
-    address payable public daoAddress;
-    address private linkAddress;
-    address private wethAddress;
-    IUniswapV3Router private uniswapV3Router;
+    address payable private daoAddress;
 
     struct BattleEntity {
         uint256 id;
@@ -26,12 +23,9 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
         address owner;
     }
 
-    bool public inRound; // If the execution of a round has begun
-    uint256 public roundIndex; // The round be executed
-    uint256 public battlePoolIndex; // Current battlePoolIndex to insert entities
-    uint256 public daoFeeBps;
-    uint256 public operationalFeeBps;
-    uint256 public rngChainlinkCost;
+    bool private inRound; // If the execution of a round has begun
+    uint256 private roundIndex; // The round be executed
+    uint256 private battlePoolIndex; // Current battlePoolIndex to insert entities
     uint256 private maxPoolSize = 40;
     uint256 private wager;
     uint256 private randomNumber;
@@ -61,12 +55,6 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
         uint256 time
     );
 
-    event LogLinkExchanged(
-        uint256 amount,
-        uint256 time,
-        address initiator
-    );
-
     event LogRewardsClaimed(
         uint256 amount,
         address claimer
@@ -88,36 +76,27 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
         uint256 _rngChainlinkCost,
         uint256 _wager
         )
+        FeesCalculator(_daoFeeBps, _operationalFeeBps)
+        FundLink(_uniswapV3Router, _linkAddress, _wethAddress, _rngChainlinkCost)
     {
         polymorphsContractAddress = _polymorphContractAddress;
         daoAddress = _daoAddress;
-        linkAddress = _linkAddress;
-        wethAddress = _wethAddress;
-        uniswapV3Router = IUniswapV3Router(_uniswapV3Router);
-        daoFeeBps = _daoFeeBps;
-        operationalFeeBps = _operationalFeeBps;
-        rngChainlinkCost = _rngChainlinkCost;
         wager = _wager;
     }
 
     /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the desired wager pool.
     /// @param polymorphId Id of the polymorph
     /// @param skillType Attack or Defence
-    function enterBattle(uint256 polymorphId, uint256 skillType)
-        external
-        payable
-    {
+    function enterBattle(uint256 polymorphId, uint256 skillType) external payable {
+        // TODO:: you should not be able to enter the same pool as roundIndex, if a random number has been request, cus the fees has already been calculated
+        // TODO:: refund overpaid amount
+        require(msg.value >= wager, "Not enough ETH amount sent to enter the pool !");
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         require(polymorphsContract.ownerOf(polymorphId) == msg.sender, "You must be the owner of the polymorph");
 
         // Handle owner already registered for the battlePoolIndex
         BattleEntity storage entity = entities[battlePoolIndex][polymorphId];
         require(entity.id == 0, "You have already registered for the current battle pool");
-
-        // Deducts the required fees and registers the wager balance to the player
-        uint256 wagerAfterfees = _getWagerAfterFees(msg.value);
-        // Increment the player balance with the wager amount (after fees being deducted)
-        playerBalances[msg.sender] = playerBalances[msg.sender].add(wagerAfterfees);
 
         // Handle pool overflow by increasing the current battlePoolIndex so we can start fulfilling the next pool
         // Handle started pool fight with left open slots, fullfil the next pool
@@ -150,14 +129,11 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
     /// It will make request for a random number using the Chainlink VRF
     /// @param ethAmount ETH amount which will be used to swap for LINK
     function executeRound(uint256 ethAmount) external {
-        IERC20 chainlinkToken = IERC20(linkAddress);
-        uint256 chainlinkBalance = chainlinkToken.balanceOf(address(this));
+        require(!inRound, "A round has already started, wait for it to finish !");
+        // Calls Uniswap to swap ETH for LINK
+        getLinkForRNGCosts(ethAmount);
 
-        // Check if there is enough LINK and if not, call Uniswap to swap ETH for LINK
-        if (chainlinkBalance < rngChainlinkCost) {
-            getLinkForRNGCosts(rngChainlinkCost, ethAmount);
-        }
-
+        // Makes the actual call for random number
         getRandomNumber();
     }
 
@@ -171,9 +147,7 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
     }
 
     /// @notice The actual battle calculation where the comparison happens
-    function battlePolymorphs()
-        public
-    {
+    function battlePolymorphs() public {
         uint256[] storage battlePool = battlePools[roundIndex];
         require(battlePool.length >= 2, "Not enough polymorphs into the Wager Battle Pool !");
         require(randomNumber != 0, "Random result is 0, please request a random number !");
@@ -233,8 +207,9 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
                 }
             }
 
-            // Calculate the wager after fees (based on the wager pool) and add it to the winner, substract it from the loser
-            uint256 wagerAfterfees = _getWagerAfterFees(wager);
+            // Calculate the wager after fees and add it to the winner, substract it from the loser
+            // TODO:: Think about this section of fees deduction and test it
+            uint256 wagerAfterfees = getWagerAfterFees(wager);
             playerBalances[winner] = playerBalances[winner].add(wagerAfterfees);
             playerBalances[loser] = playerBalances[loser].sub(wagerAfterfees);
 
@@ -308,40 +283,6 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
         battlePool.pop();
     }
 
-    /// @notice converts it to LINK, so costs can be coverd for RNG generation
-    /// @param linkAmount Exact LINK(Chainlink) amount to swap
-    /// @param ethAmount ETH amount to swap for link - difference is refunded
-    function getLinkForRNGCosts(uint256 linkAmount, uint256 ethAmount) internal nonReentrant {
-        require(ethAmount > 0, "Must pass non 0 ETH amount");
-        require(linkAmount > 0, "Must pass non 0 LINK amount");
-
-        uint256 deadline = block.timestamp + 60;
-        address tokenIn = wethAddress;
-        address tokenOut = linkAddress;
-        uint24 fee = 3000;
-        address recipient = address(this);
-        uint256 amountOut = linkAmount;
-        uint256 amountInMaximum = ethAmount;
-        uint160 sqrtPriceLimitX96 = 0;
-
-        ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter.ExactOutputSingleParams(
-            tokenIn,
-            tokenOut,
-            fee,
-            recipient,
-            deadline,
-            amountOut,
-            amountInMaximum,
-            sqrtPriceLimitX96
-        );
-
-        uniswapV3Router.exactOutputSingle{ value: ethAmount }(params);
-        // refund leftover ETH to user
-        uniswapV3Router.refundETH();
-
-        emit LogLinkExchanged(linkAmount, block.timestamp, msg.sender);
-    }
-
     /// @notice Claims the available balance of player
     function claimRewards() external nonReentrant {
         address payable recipient = payable(msg.sender);
@@ -353,30 +294,6 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
         require(success, "Transfer failed");
 
         emit LogRewardsClaimed(ethTransferAmount, msg.sender);
-    }
-
-    /// @notice Calculates the wager after deducted fees
-    /// @param wagerAmount the amount of wager to calculate for
-    /// @return the wager after the fees deduction
-    function _getWagerAfterFees(uint256 wagerAmount)
-    internal
-    view
-    returns(uint256)
-    {
-        uint256 daoFee = _calculateDAOfee(wagerAmount, daoFeeBps);
-        uint256 operationalFee = _calculateOperationalFees(wagerAmount, operationalFeeBps);
-        uint256 wagerAfterfees = wagerAmount.sub(daoFee).sub(operationalFee);
-        return wagerAfterfees;
-    }
-
-    /// @notice Subtracts predefined fee which will be used for covering fees for calling executeRound() and getting LINK for random number generation.
-    function _calculateOperationalFees(uint256 _wagerAmount, uint256 _operationalFeeBps) internal pure returns (uint256) {
-        return _operationalFeeBps.mul(_wagerAmount).div(10000);
-    }
-
-    /// @notice Subtracts predefined DAO fee in BPS and sends it to the DAO/Treasury
-    function _calculateDAOfee(uint256 _wagerAmount, uint256 _daoFeeBps) internal pure returns (uint256) {
-        return _daoFeeBps.mul(_wagerAmount).div(10000);
     }
 
     ///@notice this is a Callback method which is getting called in RandomConsumerNumber.sol

@@ -6,7 +6,7 @@ const { loadFixture } = waffle;
 const POLYMORPHS_CONTRACT_ADDRESS = "0x0650E5F57F42834896fB288923bdF43Fa68F3c56";
 const DAO_ADDRESS = "0x67b93852482113375666a310ac292D61dDD4bbb9";
 const UNISWAP_V3_ROUTER = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
-const LINK_ADDRESS = "0xc7ad46e0b8a400bb3c915120d284aafba8fc4735";
+const LINK_ADDRESS = "0x01BE23585060835E02B77ef475b0Cc51aA1e0709";
 const WETH_ADDRESS = "0xc778417e063141139fce010982780140aa0cd5ab";
 const DAO_FEE_BPS = 1000;
 const OPERATIONAL_FEEBPS = 1000;
@@ -61,4 +61,6 @@ describe("PolymorphBattleground", function () {
     expect(entity.statsMax.toNumber() != 0, "Entity Max stats should not be 0 !");
     expect(battlePoolEntityId.toNumber() === entity.id);
   });
+
+  // TODO:: Write tests for RandomConsumberNumber.sol => https://github.com/alexroan/truffle-tests-tutorial
 });
