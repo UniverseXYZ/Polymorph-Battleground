@@ -88,7 +88,6 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     /// @param polymorphId Id of the polymorph
     /// @param skillType Attack or Defence
     function enterBattle(uint256 polymorphId, uint256 skillType) external payable {
-        // TODO:: you should not be able to enter the same pool as roundIndex, if a random number has been request, cus the fees has already been calculated
         // TODO:: refund overpaid amount
         require(msg.value >= wager, "Not enough ETH amount sent to enter the pool !");
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
@@ -100,6 +99,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
 
         // Handle pool overflow by increasing the current battlePoolIndex so we can start fulfilling the next pool
         // Handle started pool fight with left open slots, fullfil the next pool
+        // Handle random number requested for the current pool (fees have already been calculated), fullfil the next pool
         if (
             battlePools[battlePoolIndex].length == maxPoolSize ||
             inRound && battlePoolIndex == roundIndex
@@ -125,18 +125,6 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         );
     }
 
-    /// @notice Backend (like Openzeppelin Defender) will call this function periodically
-    /// It will make request for a random number using the Chainlink VRF
-    /// @param ethAmount ETH amount which will be used to swap for LINK
-    function executeRound(uint256 ethAmount) external {
-        require(!inRound, "A round has already started, wait for it to finish !");
-        // Calls Uniswap to swap ETH for LINK
-        getLinkForRNGCosts(ethAmount);
-
-        // Makes the actual call for random number
-        getRandomNumber();
-    }
-
     /// @notice Calculates the stats score range of the polymorph based on its gene for example (50 - 75)
     /// @param polymorphId Id of the polymorph
     function getStatsPoints(uint256 polymorphId, uint256 skillType) private view returns (uint256 min, uint256 max) {
@@ -146,14 +134,29 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         return getStats(gene, skillType);
     }
 
+    /// @notice Backend (like Openzeppelin Defender) will call this function periodically
+    /// It will make request for a random number using the Chainlink VRF
+    /// @param ethAmount ETH amount which will be used to swap for LINK
+    function executeRound(uint256 ethAmount) external {
+        require(!inRound, "A round has already started, wait for it to finish !");
+
+        // Indicate that a round has started, so no new entries cant be accepted in the current (roundIndex) fight pool
+        // Also the fees for that roindIndex will be calculated
+        inRound = true;
+
+        // Calls Uniswap to swap ETH for LINK
+        // TODO:: if you send less ETH the transaction reverts
+        getLinkForRNGCosts(ethAmount);
+
+        // Makes the actual call for random number
+        getRandomNumber();
+    }
+
     /// @notice The actual battle calculation where the comparison happens
     function battlePolymorphs() public {
         uint256[] storage battlePool = battlePools[roundIndex];
         require(battlePool.length >= 2, "Not enough polymorphs into the Wager Battle Pool !");
-        require(randomNumber != 0, "Random result is 0, please request a random number !");
-
-        // Indicate that a round has started, so no new entries cant be accepted in the fight pool
-        inRound = true;
+        require(randomNumber != 0, "Random Number is 0, please request a random number or wait for its fulfilment !");
 
         while(battlePool.length >= 2) {
             // Take random numbers for picking opponents
@@ -255,7 +258,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
             }
         }
 
-        // Reset randomNumber for that wager pool
+        // Reset randomNumber for that round
         randomNumber = 0;
 
         // Increase the round index
