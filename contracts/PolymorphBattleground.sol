@@ -34,6 +34,7 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
     uint256 public rngChainlinkCost;
     uint256 private maxPoolSize = 40;
     uint256 private wager;
+    uint256 private randomNumber;
 
     mapping(address => uint256) public playerBalances;
     mapping(uint256 => mapping(uint256 => BattleEntity)) public entities; //battlePoolIndex => polymorphId => BattleEntity
@@ -175,14 +176,14 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
     {
         uint256[] storage battlePool = battlePools[roundIndex];
         require(battlePool.length >= 2, "Not enough polymorphs into the Wager Battle Pool !");
-        require(randomResult != 0, "Random result is 0, please request a random number !");
+        require(randomNumber != 0, "Random result is 0, please request a random number !");
 
         // Indicate that a round has started, so no new entries cant be accepted in the fight pool
         inRound = true;
 
         while(battlePool.length >= 2) {
             // Take random numbers for picking opponents
-            uint256[] memory randoms = expand(randomResult, 2);
+            uint256[] memory randoms = expand(randomNumber, 2);
 
             // Take a random index between 0 and the current pool range
             uint256 first = randoms[0] % (battlePool.length - 1);
@@ -247,7 +248,7 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
                 );
 
             // Update the last random result for that pool fight, so we will have a new one in the next cycle
-            randomResult = statsRandoms[1];
+            randomNumber = statsRandoms[1];
         }
 
         // Handle the case if the roundIndex == battlePoolIndex (this means that the battle is over and nobody has entered for new battles
@@ -280,7 +281,7 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
         }
 
         // Reset randomNumber for that wager pool
-        randomResult = 0;
+        randomNumber = 0;
 
         // Increase the round index
         emit LogRoundExecuted(roundIndex, block.timestamp);
@@ -376,6 +377,11 @@ contract PolymorphBattleground is BattleStatsCalculator, RandomNumberConsumer, R
     /// @notice Subtracts predefined DAO fee in BPS and sends it to the DAO/Treasury
     function _calculateDAOfee(uint256 _wagerAmount, uint256 _daoFeeBps) internal pure returns (uint256) {
         return _daoFeeBps.mul(_wagerAmount).div(10000);
+    }
+
+    ///@notice this is a Callback method which is getting called in RandomConsumerNumber.sol
+    function saveRandomNumber(uint256 n) internal override {
+        randomNumber = n;
     }
 
     receive() external payable {}
