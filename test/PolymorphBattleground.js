@@ -66,6 +66,27 @@ describe("PolymorphBattleground", function () {
     expect(battlePoolEntityId.toNumber() === entity.id);
   });
 
+  it("Should refund if overpay for entering a battle", async function () {
+    const { polymorphBattleground, polymorphsContract } = await loadFixture(deployContracts);
+
+    const [signer] = await ethers.getSigners();
+    // Every signer starts with 1000 ETH
+    const sentEthAmount = 10;
+    const amountBefore = await signer.getBalance();
+    const parsedBalanceBefore = await ethers.utils.formatEther(amountBefore);
+    const expectedAmountWithoutRefund = parseInt(parsedBalanceBefore) - sentEthAmount;
+
+    await polymorphsContract.mint(signer.address, 2);
+    await polymorphBattleground.enterBattle(2, 1, {value: ethers.utils.parseEther("10")});
+
+    const amountAfter = await signer.getBalance();
+    const parsedBalanceAfter = await ethers.utils.formatEther(amountAfter);
+    const parsedBalanceAfterInt = parseInt(parsedBalanceAfter);
+
+    const comparison = expectedAmountWithoutRefund < parsedBalanceAfterInt;
+    expect(comparison).to.be.true;
+  });
+
   it("Should Calculate Fees", async function () {
     const { polymorphBattleground } = await loadFixture(deployContracts);
     const poolLength = 2;

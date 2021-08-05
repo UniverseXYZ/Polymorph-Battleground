@@ -90,7 +90,6 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     /// @param polymorphId Id of the polymorph
     /// @param skillType Attack or Defence
     function enterBattle(uint256 polymorphId, uint256 skillType) external payable {
-        // TODO:: refund overpaid amount
         require(msg.value >= wager, "Not enough ETH amount sent to enter the pool !");
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         require(polymorphsContract.ownerOf(polymorphId) == msg.sender, "You must be the owner of the polymorph");
@@ -101,6 +100,15 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
 
         // Increment the player balance with the wager amount, the fees will be deducted after battle
         playerBalances[msg.sender] = playerBalances[msg.sender].add(msg.value);
+
+        // Refund overpaid amount
+        if (msg.value > wager) {
+            address payable recipient = payable(msg.sender);
+            uint256 overpaidAmount = msg.value.sub(wager);
+            playerBalances[msg.sender] = playerBalances[msg.sender].sub(overpaidAmount);
+            (bool success, ) = recipient.call{value: overpaidAmount}("");
+            require(success, "Refund failed");
+        }
 
         // Handle pool overflow by increasing the current battlePoolIndex so we can start fulfilling the next pool
         // Handle started pool fight with left open slots, fullfil the next pool
