@@ -29,6 +29,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     uint256 private maxPoolSize = 40;
     uint256 private wager;
     uint256 private randomNumber;
+    uint256 private roundFees;
+    uint256 private paydEthAmountForLinkSwap;
 
     mapping(address => uint256) public playerBalances;
     mapping(uint256 => mapping(uint256 => BattleEntity)) public entities; //battlePoolIndex => polymorphId => BattleEntity
@@ -97,6 +99,9 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         BattleEntity storage entity = entities[battlePoolIndex][polymorphId];
         require(entity.id == 0, "You have already registered for the current battle pool");
 
+        // Increment the player balance with the wager amount, the fees will be deducted after battle
+        playerBalances[msg.sender] = playerBalances[msg.sender].add(msg.value);
+
         // Handle pool overflow by increasing the current battlePoolIndex so we can start fulfilling the next pool
         // Handle started pool fight with left open slots, fullfil the next pool
         // Handle random number requested for the current pool (fees have already been calculated), fullfil the next pool
@@ -139,6 +144,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     /// @param ethAmount ETH amount which will be used to swap for LINK
     function executeRound(uint256 ethAmount) external {
         require(!inRound, "A round has already started, wait for it to finish !");
+        require(battlePools[roundIndex].length >= 2, "Not enough polymorphs into the Battle Pool !");
 
         // Indicate that a round has started, so no new entries cant be accepted in the current (roundIndex) fight pool
         // Also the fees for that roindIndex will be calculated
@@ -147,6 +153,9 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         // Calls Uniswap to swap ETH for LINK
         // TODO:: if you send less ETH the transaction reverts
         getLinkForRNGCosts(ethAmount);
+
+        // Set the fees for the current round, based on the participants count and the payd ethAmount for LINK
+        roundFees = getFeesAmount(wager, paydEthAmountForLinkSwap, battlePools[roundIndex].length);
 
         // Makes the actual call for random number
         getRandomNumber();
@@ -210,9 +219,11 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
                 }
             }
 
-            // Calculate the wager after fees and add it to the winner, substract it from the loser
-            // TODO:: Think about this section of fees deduction and test it
-            uint256 wagerAfterfees = getWagerAfterFees(wager);
+            // Substract the fees for participation in the game
+            playerBalances[winner] = playerBalances[winner].sub(roundFees);
+            playerBalances[loser] = playerBalances[loser].sub(roundFees);
+            // Add the won wager to the winner, and substract it from the loser
+            uint256 wagerAfterfees = wager.sub(roundFees);
             playerBalances[winner] = playerBalances[winner].add(wagerAfterfees);
             playerBalances[loser] = playerBalances[loser].sub(wagerAfterfees);
 
@@ -267,6 +278,12 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
 
         // Indicate that the fight round has finished
         inRound = false;
+
+        // Reset roundFees
+        roundFees = 0;
+
+        // Reset payd ETH for Link amount
+        paydEthAmountForLinkSwap = 0;
     }
 
     /// @notice Moves battle entity to the end of the pool and pops it out
@@ -302,6 +319,11 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     ///@notice this is a Callback method which is getting called in RandomConsumerNumber.sol
     function saveRandomNumber(uint256 n) internal override {
         randomNumber = n;
+    }
+
+    ///@notice this is a Callback method which is getting called in FundLink.sol after swapping ETH for LINk
+    function setPaydEthAmountForLinkSwap(uint256 amount) internal override {
+        paydEthAmountForLinkSwap = amount;
     }
 
     receive() external payable {}

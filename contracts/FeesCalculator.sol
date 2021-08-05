@@ -14,19 +14,19 @@ contract FeesCalculator {
         operationalFeeBps = _operationalFeeBps;
     }
 
-    /// @notice Calculates the wager after deducted fees
-    /// @param wagerAmount the amount of wager to calculate for
-    /// @return the wager after the fees deduction
-    function getWagerAfterFees(uint256 wagerAmount) internal view returns(uint256) {
-        uint256 daoFee = _calculateDAOfee(wagerAmount, daoFeeBps);
-        uint256 operationalFee = _calculateOperationalFees(wagerAmount, operationalFeeBps);
-        uint256 wagerAfterfees = wagerAmount.sub(daoFee).sub(operationalFee);
-        return wagerAfterfees;
+    /// @notice Calculates the Fees for pool participation
+    /// @param wager he amount of wager to calculate for
+    /// @param ethAmount the ETH amount needed for RNG request
+    /// @param poolLength the count of participants to split the fee for LINK
+    function getFeesAmount(uint256 wager, uint256 ethAmount, uint256 poolLength) public view returns (uint256) {
+        uint256 daoFee = _calculateDAOfee(wager, daoFeeBps);
+        uint256 operationalFee = _calculateOperationalFees(ethAmount, poolLength);
+        return daoFee.add(operationalFee);
     }
 
     /// @notice Subtracts predefined fee which will be used for covering fees for calling executeRound() and getting LINK for random number generation.
-    function _calculateOperationalFees(uint256 _wagerAmount, uint256 _operationalFeeBps) internal pure returns (uint256) {
-        return _operationalFeeBps.mul(_wagerAmount).div(10000);
+    function _calculateOperationalFees(uint256 _ethAmount, uint256 _poolLength) internal pure returns (uint256) {
+        return _ethAmount.div(_poolLength);
     }
 
     /// @notice Subtracts predefined DAO fee in BPS and sends it to the DAO/Treasury

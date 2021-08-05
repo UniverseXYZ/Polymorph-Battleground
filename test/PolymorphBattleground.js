@@ -15,23 +15,7 @@ const WAGER = "1000000000000000";
 
 
 describe("PolymorphBattleground", function () {
-  it("Should calculate stats based on Gene", async function () {
-    const BattleStatsCalculator = await ethers.getContractFactory("BattleStatsCalculator");
-    const battleStatsCalculator = await BattleStatsCalculator.deploy();
-    await battleStatsCalculator.deployed();
-
-    const PolymorphWithGeneChanger = await ethers.getContractFactory("PolymorphWithGeneChanger");
-    const polymorphWithGeneChanger = await PolymorphWithGeneChanger.deploy();
-    await polymorphWithGeneChanger.deployed();
-
-    const gene = await polymorphWithGeneChanger.geneOf(1);
-    const [min, max] = await battleStatsCalculator.getStats(gene.toString(), 0);
-
-    assert(min.toNumber() != 0, "Min stats should not be 0 !");
-    assert(max.toString() != 0, "Max stats should not be 0 !");
-  });
-
-  it("Should enter the battle", async function () {
+  const deployContracts = async () => {
     const PolymorphsContract = await ethers.getContractFactory("PolymorphWithGeneChanger");
     const polymorphsContract = await PolymorphsContract.deploy();
     await polymorphsContract.deployed();
@@ -50,6 +34,26 @@ describe("PolymorphBattleground", function () {
       );
     await polymorphBattleground.deployed();
 
+    const BattleStatsCalculator = await ethers.getContractFactory("BattleStatsCalculator");
+    const battleStatsCalculator = await BattleStatsCalculator.deploy();
+    await battleStatsCalculator.deployed();
+
+    return { polymorphBattleground, polymorphsContract, battleStatsCalculator };
+  };
+
+  it("Should calculate stats based on Gene", async function () {
+    const { battleStatsCalculator, polymorphsContract } = await loadFixture(deployContracts);
+
+    const gene = await polymorphsContract.geneOf(1);
+    const [min, max] = await battleStatsCalculator.getStats(gene.toString(), 0);
+
+    assert(min.toNumber() != 0, "Min stats should not be 0 !");
+    assert(max.toString() != 0, "Max stats should not be 0 !");
+  });
+
+  it("Should enter the battle", async function () {
+    const { polymorphBattleground, polymorphsContract } = await loadFixture(deployContracts);
+
     const [signer] = await ethers.getSigners();
     await polymorphsContract.mint(signer.address, 2);
     await polymorphBattleground.enterBattle(2, 1, {value: ethers.utils.parseEther("1")});
@@ -60,6 +64,14 @@ describe("PolymorphBattleground", function () {
     expect(entity.statsMin.toNumber() != 0, "Entity Min stats should not be 0 !");
     expect(entity.statsMax.toNumber() != 0, "Entity Max stats should not be 0 !");
     expect(battlePoolEntityId.toNumber() === entity.id);
+  });
+
+  it("Should Calculate Fees", async function () {
+    const { polymorphBattleground } = await loadFixture(deployContracts);
+    const poolLength = 2;
+    const fees = await polymorphBattleground.getFeesAmount(WAGER, RNG_CHAINLINK_COST, poolLength);
+    // It should be bigger becase we add the Dao Fees also example => 1000000000000000 / 2 = 50000000000000000 + daoFees = 50100000000000000;
+    expect(fees > WAGER / poolLength);
   });
 
   // TODO:: Write tests for RandomConsumberNumber.sol => https://github.com/alexroan/truffle-tests-tutorial

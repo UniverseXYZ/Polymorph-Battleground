@@ -3,9 +3,12 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./IUniswapV3Router.sol";
 
 contract FundLink is ReentrancyGuard {
+    using SafeMath for uint256;
+
     address private linkAddress;
     address private wethAddress;
     uint256 private rngChainlinkCost;
@@ -52,10 +55,15 @@ contract FundLink is ReentrancyGuard {
             sqrtPriceLimitX96
         );
 
-        uniswapV3Router.exactOutputSingle{ value: ethAmount }(params);
+        uint256 amountIn = uniswapV3Router.exactOutputSingle{ value: ethAmount }(params);
+        uint256 payd = ethAmount.sub(amountIn);
+        setPaydEthAmountForLinkSwap(payd);
         // In case the user sends more ETH, refund leftover ETH to user
         uniswapV3Router.refundETH();
 
         emit LogLinkExchanged(linkAmount, block.timestamp, msg.sender);
     }
+
+    // Abstract mehtod needs to be impleneted in order to save the payd amount
+    function setPaydEthAmountForLinkSwap(uint256 amount) internal virtual {}
 }
