@@ -48,26 +48,14 @@ contract BattleStatsCalculator {
             uint256 genePair = genePairs[geneIndex];
             uint256 itemIndex = genePair % itemsCountByTypeMap[geneIndex];
 
-            if (skillType == uint(BattleStances.ATTACK)) {
-                max = max.add(items[geneIndex][itemIndex].aMax);
-                min = min.add(items[geneIndex][itemIndex].aMin);
-            }
+            Item memory i = items[geneIndex][itemIndex];
 
-            if (skillType == uint(BattleStances.DEFENCE)) {
-                max = max.add(items[geneIndex][itemIndex].dMax);
-                min = min.add(items[geneIndex][itemIndex].dMin);
-            }
+            max = max.add(skillType == uint(BattleStances.ATTACK) ? i.aMax : i.dMax);
+            min = min.add(skillType == uint(BattleStances.ATTACK) ? i.aMin : i.dMin);
         }
 
         return (min, max);
     }
-
-    //TODO:: implement the following methods
-    /// @notice Should be able to add new geneIndex in the items mapping (for example if we add an gene for the neck and items (necklace etc..))
-    function addItemToMapping(uint8 geneIndex, uint8 itemIndex, uint256 aMin, uint256 aMax, uint256 dMin, uint256 dMax) internal {}
-
-    /// @notice in the future we may want to increase the gene pairs count in order to add include new parts from the body (for example neck)
-    function setGenesPairsCount(uint8 count) internal {}
 
     function initItems() internal {
         // Footwear

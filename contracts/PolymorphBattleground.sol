@@ -26,11 +26,12 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     bool private inRound; // If the execution of a round has begun
     uint256 private roundIndex; // The round be executed
     uint256 private battlePoolIndex; // Current battlePoolIndex to insert entities
-    uint256 private maxPoolSize = 40;
+    uint256 private maxPoolSize = 40; // TODO:: Max gas is 2mil, calc the max N
+    uint256 private minPoolSize = 10; // There should be enough participants, in order to incentivise the callers of start/finish round methods
     uint256 private wager;
     uint256 private randomNumber;
     uint256 private roundFees;
-    uint256 private paydEthAmountForLinkSwap;
+    uint256 private paidEthAmountForLinkSwap;
 
     mapping(address => uint256) public playerBalances;
     mapping(uint256 => mapping(uint256 => BattleEntity)) public entities; //battlePoolIndex => polymorphId => BattleEntity
@@ -86,10 +87,10 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         wager = _wager;
     }
 
-    /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the desired wager pool.
+    /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the pool.
     /// @param polymorphId Id of the polymorph
     /// @param skillType Attack or Defence
-    function enterBattle(uint256 polymorphId, uint256 skillType) external payable {
+    function enterBattle(uint256 polymorphId, uint256 skillType) external payable nonReentrant {
         require(msg.value >= wager, "Not enough ETH amount sent to enter the pool !");
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         require(polymorphsContract.ownerOf(polymorphId) == msg.sender, "You must be the owner of the polymorph");
@@ -116,7 +117,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         if (
             battlePools[battlePoolIndex].length == maxPoolSize ||
             inRound && battlePoolIndex == roundIndex
-            ) battlePoolIndex = battlePoolIndex + 1;
+            ) battlePoolIndex++;
 
         (uint256 min, uint256 max) = getStatsPoints(polymorphId, skillType);
 
@@ -150,9 +151,10 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     /// @notice Backend (like Openzeppelin Defender) will call this function periodically
     /// It will make request for a random number using the Chainlink VRF
     /// @param ethAmount ETH amount which will be used to swap for LINK
-    function executeRound(uint256 ethAmount) external {
+    /// TODO:: research if there is a way to take the ethAmount needed for 0.1 LINK dynamically
+    function startRound(uint256 ethAmount) external {
         require(!inRound, "A round has already started, wait for it to finish !");
-        require(battlePools[roundIndex].length >= 2, "Not enough polymorphs into the Battle Pool !");
+        require(battlePools[roundIndex].length >= minPoolSize, "Not enough polymorphs into the Battle Pool !");
 
         // Indicate that a round has started, so no new entries cant be accepted in the current (roundIndex) fight pool
         // Also the fees for that roindIndex will be calculated
@@ -162,17 +164,19 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         // TODO:: if you send less ETH the transaction reverts
         getLinkForRNGCosts(ethAmount);
 
-        // Set the fees for the current round, based on the participants count and the payd ethAmount for LINK
-        roundFees = getFeesAmount(wager, paydEthAmountForLinkSwap, battlePools[roundIndex].length);
+        // Set the fees for the current round, based on the participants count and the paid ethAmount for LINK
+        roundFees = getFeesAmount(wager, paidEthAmountForLinkSwap, battlePools[roundIndex].length);
 
         // Makes the actual call for random number
         getRandomNumber();
+
+        //TODO:: return 0.005 ETH per polymorph (DAO configurable) to the function caller include it into the fees
     }
 
     /// @notice The actual battle calculation where the comparison happens
-    function battlePolymorphs() public {
+    function finishRound() public {
         uint256[] storage battlePool = battlePools[roundIndex];
-        require(battlePool.length >= 2, "Not enough polymorphs into the Wager Battle Pool !");
+        require(battlePool.length >= minPoolSize, "Not enough polymorphs into the Battle Pool !");
         require(randomNumber != 0, "Random Number is 0, please request a random number or wait for its fulfilment !");
 
         while(battlePool.length >= 2) {
@@ -180,7 +184,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
             uint256[] memory randoms = expand(randomNumber, 2);
 
             // Take a random index between 0 and the current pool range
-            uint256 first = randoms[0] % (battlePool.length - 1);
+            uint256 first = randoms[0] % battlePool.length;
             uint256 firstId = battlePool[first];
             BattleEntity storage entity = entities[battlePoolIndex][firstId];
 
@@ -189,7 +193,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
 
             // Take second random number from the range
             // if the length is 1 we should take 1 otherwise number % 0 = NaN
-            uint256 second = (battlePool.length - 1 < 1) ? randoms[1] % 1 : randoms[1] % (battlePool.length - 1);
+            uint256 second = (battlePool.length - 1 < 1) ? 0 : randoms[1] % battlePool.length;
             uint256 secondId = battlePool[second];
             BattleEntity storage entity2 = entities[battlePoolIndex][secondId];
 
@@ -200,8 +204,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
             uint256[] memory statsRandoms = expand(randoms[1], 2);
 
             // Calculate stats
-            uint256 statsFirst = entity.statsMin + (statsRandoms[0] % (entity.statsMax - entity.statsMin));
-            uint256 statsSecond = entity2.statsMin + (statsRandoms[1] % (entity2.statsMax - entity2.statsMin));
+            uint256 statsFirst = entity.statsMin + (statsRandoms[0] % (1 + (entity.statsMax - entity.statsMin)));
+            uint256 statsSecond = entity2.statsMin + (statsRandoms[1] % (1 + (entity2.statsMax - entity2.statsMin)));
 
             // winner
             address winner;
@@ -290,8 +294,10 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         // Reset roundFees
         roundFees = 0;
 
-        // Reset payd ETH for Link amount
-        paydEthAmountForLinkSwap = 0;
+        // Reset paid ETH for Link amount
+        paidEthAmountForLinkSwap = 0;
+
+        //TODO:: return 0.01 ETH per polymorph (DAO configurable) to the function caller include it into the fees
     }
 
     /// @notice Moves battle entity to the end of the pool and pops it out
@@ -301,9 +307,6 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         // If its not already the last element
         if (polymoprhIndex != battlePool.length - 1) {
             uint256 last = battlePool[battlePool.length - 1];
-            uint256 curr = battlePool[polymoprhIndex];
-            // Move the current to the end
-            battlePool[battlePool.length - 1] = curr;
             // Put the last one on the current place
             battlePool[polymoprhIndex] = last;
         }
@@ -330,8 +333,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     }
 
     ///@notice this is a Callback method which is getting called in FundLink.sol after swapping ETH for LINk
-    function setPaydEthAmountForLinkSwap(uint256 amount) internal override {
-        paydEthAmountForLinkSwap = amount;
+    function setPaidEthAmountForLinkSwap(uint256 amount) internal override {
+        paidEthAmountForLinkSwap = amount;
     }
 
     receive() external payable {}

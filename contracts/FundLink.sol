@@ -33,7 +33,7 @@ contract FundLink is ReentrancyGuard {
         require(ethAmount > 0, "Must pass non 0 ETH amount");
         uint256 linkAmount = rngChainlinkCost;
 
-        // TODO:: Should we add check if address has enough ETH to be sent for a swap ?
+        require(ethAmount <= address(this).balance, "The contract doesn't have that much ETH !");
 
         uint256 deadline = block.timestamp + 60;
         address tokenIn = wethAddress;
@@ -56,14 +56,14 @@ contract FundLink is ReentrancyGuard {
         );
 
         uint256 amountIn = uniswapV3Router.exactOutputSingle{ value: ethAmount }(params);
-        uint256 payd = ethAmount.sub(amountIn);
-        setPaydEthAmountForLinkSwap(payd);
+        uint256 paid = ethAmount.sub(amountIn);
+        setPaidEthAmountForLinkSwap(paid);
         // In case the user sends more ETH, refund leftover ETH to user
         uniswapV3Router.refundETH();
 
         emit LogLinkExchanged(linkAmount, block.timestamp, msg.sender);
     }
 
-    // Abstract mehtod needs to be impleneted in order to save the payd amount
-    function setPaydEthAmountForLinkSwap(uint256 amount) internal virtual {}
+    // Abstract mehtod needs to be impleneted in order to save the paid amount
+    function setPaidEthAmountForLinkSwap(uint256 amount) internal virtual {}
 }
