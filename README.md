@@ -38,5 +38,22 @@ Upon finishRound() call the game will:
 3. Incentivise the caller
 
 
+Upon initialization of the contract we need to call initItems() and pass as an array with the following structure the items. We have separated the items into two arrays in order to fit in 2 transactions:
+
+```
+const items = [
+    [ genePosition: 0, itemIndex: 0, aMin: 1, aMax: 50, dMin: 1, dMax: 50 ]
+    [ genePosition: 1, itemIndex: 0, aMin: 1, aMax: 50, dMin: 1, dMax: 50 ]
+    [ genePosition: 2, itemIndex: 0, aMin: 1, aMax: 50, dMin: 1, dMax: 50 ]
+    [ genePosition: 3, itemIndex: 0, aMin: 1, aMax: 50, dMin: 1, dMax: 50 ]
+    [ genePosition: 4, itemIndex: 0, aMin: 1, aMax: 50, dMin: 1, dMax: 50 ]
+    [ genePosition: 5, itemIndex: 0, aMin: 1, aMax: 50, dMin: 1, dMax: 50 ]
+    [ genePosition: 6, itemIndex: 0, aMin: 1, aMax: 50, dMin: 1, dMax: 50 ]
+]
+
+PolymorphBattleground.initItems(items);
+
+```
+
 # Architecture Diagram
 ![Alt text](./images/BattleGroundDiagram.png?raw=true "Title")
