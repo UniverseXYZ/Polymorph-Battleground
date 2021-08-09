@@ -11,7 +11,9 @@ const WETH_ADDRESS = "0xc778417e063141139fce010982780140aa0cd5ab";
 const DAO_FEE_BPS = 1000;
 const OPERATIONAL_FEEBPS = 1000;
 const RNG_CHAINLINK_COST = "100000000000000000";
-const WAGER = "1000000000000000";
+const WAGER = "100000000000000000"; // 0.1
+const START_ROUND_INCETIVE = "5000000000000000"; // 0,005 ETH
+const END_ROUND_INCETIVE = "10000000000000000"; // 0.01
 
 
 describe("PolymorphBattleground", function () {
@@ -30,7 +32,9 @@ describe("PolymorphBattleground", function () {
       DAO_FEE_BPS,
       OPERATIONAL_FEEBPS,
       RNG_CHAINLINK_COST,
-      WAGER
+      WAGER,
+      START_ROUND_INCETIVE,
+      END_ROUND_INCETIVE
       );
     await polymorphBattleground.deployed();
 
@@ -90,9 +94,10 @@ describe("PolymorphBattleground", function () {
   it("Should Calculate Fees", async function () {
     const { polymorphBattleground } = await loadFixture(deployContracts);
     const poolLength = 2;
-    const fees = await polymorphBattleground.getFeesAmount(WAGER, RNG_CHAINLINK_COST, poolLength);
-    // It should be bigger becase we add the Dao Fees also example => 1000000000000000 / 2 = 50000000000000000 + daoFees = 50100000000000000;
-    expect(fees > WAGER / poolLength);
+    const fees = await polymorphBattleground.getFeesAmount(WAGER, RNG_CHAINLINK_COST, poolLength, START_ROUND_INCETIVE, END_ROUND_INCETIVE);
+    // daoFee = 100000000000000, operationalFee = 50000000000000000, startRoundIncentiveFee = 10000000000000000, endRoundIncentiveFee = 20000000000000000
+    // TOTAL = 80100000000000000
+    expect(fees.toString() === "80100000000000000"); // 0,0801 ETH
   });
 
   // TODO:: Write tests for RandomConsumberNumber.sol => https://github.com/alexroan/truffle-tests-tutorial

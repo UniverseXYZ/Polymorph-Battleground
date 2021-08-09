@@ -32,6 +32,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     uint256 private randomNumber;
     uint256 private roundFees;
     uint256 private paidEthAmountForLinkSwap;
+    uint256 private startRoundIncetive;
+    uint256 private finishRoundIncetive;
 
     mapping(address => uint256) public playerBalances;
     mapping(uint256 => mapping(uint256 => BattleEntity)) public entities; //battlePoolIndex => polymorphId => BattleEntity
@@ -77,7 +79,9 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         uint256 _daoFeeBps,
         uint256 _operationalFeeBps,
         uint256 _rngChainlinkCost,
-        uint256 _wager
+        uint256 _wager,
+        uint256 _startRoundIncetive,
+        uint256 _finishRoundIncetive
         )
         FeesCalculator(_daoFeeBps, _operationalFeeBps)
         FundLink(_uniswapV3Router, _linkAddress, _wethAddress, _rngChainlinkCost)
@@ -85,6 +89,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         polymorphsContractAddress = _polymorphContractAddress;
         daoAddress = _daoAddress;
         wager = _wager;
+        startRoundIncetive = _startRoundIncetive;
+        finishRoundIncetive = _finishRoundIncetive;
     }
 
     /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the pool.
@@ -165,12 +171,25 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         getLinkForRNGCosts(ethAmount);
 
         // Set the fees for the current round, based on the participants count and the paid ethAmount for LINK
-        roundFees = getFeesAmount(wager, paidEthAmountForLinkSwap, battlePools[roundIndex].length);
+        roundFees = getFeesAmount(
+            wager,
+            paidEthAmountForLinkSwap,
+            battlePools[roundIndex].length,
+            startRoundIncetive,
+            finishRoundIncetive
+            );
 
         // Makes the actual call for random number
         getRandomNumber();
+        // TODO:: Should we decrease player balances based on the fees upon starting the round
+        // so no one will be able to claim rewards without paying the fees
 
-        //TODO:: return 0.005 ETH per polymorph (DAO configurable) to the function caller include it into the fees
+        // return Incentive fee per polymorph (DAO configurable) to the function caller
+        uint256 callerIncetiveAmount = calculateIncetivise(startRoundIncetive, battlePools[roundIndex].length);
+
+        address payable recipient = payable(msg.sender);
+        (bool success, ) = recipient.call{value: callerIncetiveAmount}("");
+        require(success, "Start round incetinve failed");
     }
 
     /// @notice The actual battle calculation where the comparison happens
@@ -178,6 +197,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         uint256[] storage battlePool = battlePools[roundIndex];
         require(battlePool.length >= minPoolSize, "Not enough polymorphs into the Battle Pool !");
         require(randomNumber != 0, "Random Number is 0, please request a random number or wait for its fulfilment !");
+
+        uint256 participants = battlePool.length;
 
         while(battlePool.length >= 2) {
             // Take random numbers for picking opponents
@@ -297,7 +318,13 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         // Reset paid ETH for Link amount
         paidEthAmountForLinkSwap = 0;
 
-        //TODO:: return 0.01 ETH per polymorph (DAO configurable) to the function caller include it into the fees
+        // Incetivise function caller included into the enter fees
+        uint256 activePlayers = participants % 2 == 0 ? participants : participants - 1;
+        uint256 callerIncetiveAmount = calculateIncetivise(finishRoundIncetive, activePlayers);
+
+        address payable recipient = payable(msg.sender);
+        (bool success, ) = recipient.call{value: callerIncetiveAmount}("");
+        require(success, "Fnish round incetinve failed");
     }
 
     /// @notice Moves battle entity to the end of the pool and pops it out
@@ -316,6 +343,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
 
     /// @notice Claims the available balance of player
     function claimRewards() external nonReentrant {
+        // TODO:: should the user be able to claim rewards if it's in round ?
+        // TODO:: or we should substract their balance upon round start ?
         address payable recipient = payable(msg.sender);
         require(playerBalances[msg.sender] > 0, "Balance is zero");
 
@@ -335,6 +364,14 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     ///@notice this is a Callback method which is getting called in FundLink.sol after swapping ETH for LINk
     function setPaidEthAmountForLinkSwap(uint256 amount) internal override {
         paidEthAmountForLinkSwap = amount;
+    }
+
+    function setStartRoundIncentive(uint256 incentive) onlyDAO external {
+        startRoundIncetive = incentive;
+    }
+
+    function setFinishRoundIncentive(uint256 incentive) onlyDAO external {
+        finishRoundIncetive = incentive;
     }
 
     receive() external payable {}
