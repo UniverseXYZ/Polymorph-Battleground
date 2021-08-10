@@ -23,17 +23,17 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         address owner;
     }
 
-    bool private inRound; // If the execution of a round has begun
-    uint256 private roundIndex; // The round be executed
-    uint256 private battlePoolIndex; // Current battlePoolIndex to insert entities
-    uint256 private maxPoolSize = 40; // TODO:: Max gas is 2mil, calc the max N
-    uint256 private minPoolSize = 10; // There should be enough participants, in order to incentivise the callers of start/finish round methods
-    uint256 private wager;
-    uint256 private randomNumber;
-    uint256 private roundFees;
-    uint256 private paidEthAmountForLinkSwap;
-    uint256 private startRoundIncetive;
-    uint256 private finishRoundIncetive;
+    bool public inRound; // If the execution of a round has begun
+    uint256 public roundIndex; // The round be executed
+    uint256 public battlePoolIndex; // Current battlePoolIndex to insert entities
+    uint256 public maxPoolSize = 40;
+    uint256 public minPoolSize = 10; // There should be enough participants, in order to incentivise the callers of start/finish round methods
+    uint256 public wager = 100000000000000000; // 0,1
+    uint256 public randomNumber;
+    uint256 public roundFees;
+    uint256 public paidEthAmountForLinkSwap;
+    uint256 public startRoundIncetive;
+    uint256 public finishRoundIncetive;
 
     mapping(address => uint256) public playerBalances;
     mapping(uint256 => mapping(uint256 => BattleEntity)) public entities; //battlePoolIndex => polymorphId => BattleEntity
@@ -79,16 +79,16 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         uint256 _daoFeeBps,
         uint256 _operationalFeeBps,
         uint256 _rngChainlinkCost,
-        uint256 _wager,
         uint256 _startRoundIncetive,
-        uint256 _finishRoundIncetive
+        uint256 _finishRoundIncetive,
+        address _vrfCoordinator
         )
         FeesCalculator(_daoFeeBps, _operationalFeeBps)
         FundLink(_uniswapV3Router, _linkAddress, _wethAddress, _rngChainlinkCost)
+        RandomNumberConsumer(_vrfCoordinator)
     {
         polymorphsContractAddress = _polymorphContractAddress;
         daoAddress = _daoAddress;
-        wager = _wager;
         startRoundIncetive = _startRoundIncetive;
         finishRoundIncetive = _finishRoundIncetive;
     }
@@ -161,7 +161,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     function startRound(uint256 ethAmount) external {
         require(!inRound, "A round has already started, wait for it to finish !");
         require(battlePools[roundIndex].length >= minPoolSize, "Not enough polymorphs into the Battle Pool !");
-
+        require(roundFees * battlePools[roundIndex].length <= address(this).balance, "Not enough ETH in contract to pay Fees, the wager must be bigger or decrase the incentives !");
         // Indicate that a round has started, so no new entries cant be accepted in the current (roundIndex) fight pool
         // Also the fees for that roindIndex will be calculated
         inRound = true;

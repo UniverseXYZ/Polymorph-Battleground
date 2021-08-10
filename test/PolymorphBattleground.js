@@ -129,7 +129,7 @@ const ITEMS1 = [
   [4, 21, 1, 50, 1, 50],
   [4, 22, 1, 50, 1, 50],
   [4, 23, 1, 50, 1, 50],
-  [4, 24, 1, 50, 1, 50],
+  [4, 24, 1, 50, 1, 50]
 ];
 
 const ITEMS2 = [
@@ -245,6 +245,8 @@ const ITEMS2 = [
 
 describe("PolymorphBattleground", function () {
   const deployContracts = async () => {
+    const [vrfCoordinator] = await ethers.getSigners();
+
     const PolymorphsContract = await ethers.getContractFactory("PolymorphWithGeneChanger");
     const polymorphsContract = await PolymorphsContract.deploy();
     await polymorphsContract.deployed();
@@ -259,9 +261,9 @@ describe("PolymorphBattleground", function () {
       DAO_FEE_BPS,
       OPERATIONAL_FEEBPS,
       RNG_CHAINLINK_COST,
-      WAGER,
       START_ROUND_INCETIVE,
-      END_ROUND_INCETIVE
+      END_ROUND_INCETIVE,
+      vrfCoordinator.address
       );
     await polymorphBattleground.deployed();
 
@@ -275,8 +277,8 @@ describe("PolymorphBattleground", function () {
   it("Should calculate stats based on Gene", async function () {
     const { battleStatsCalculator, polymorphsContract } = await loadFixture(deployContracts);
 
-    battleStatsCalculator.initItems(ITEMS1);
-    battleStatsCalculator.initItems(ITEMS2);
+    await battleStatsCalculator.initItems(ITEMS1);
+    await battleStatsCalculator.initItems(ITEMS2);
     const gene = await polymorphsContract.geneOf(1);
     const [min, max] = await battleStatsCalculator.getStats(gene.toString(), 0);
 
@@ -306,8 +308,8 @@ describe("PolymorphBattleground", function () {
 
     const [signer] = await ethers.getSigners();
     // Every signer starts with 1000 ETH
-    battleStatsCalculator.initItems(ITEMS1);
-    battleStatsCalculator.initItems(ITEMS2);
+    await battleStatsCalculator.initItems(ITEMS1);
+    await battleStatsCalculator.initItems(ITEMS2);
     const sentEthAmount = 10;
     const amountBefore = await signer.getBalance();
     const parsedBalanceBefore = await ethers.utils.formatEther(amountBefore);
@@ -333,5 +335,51 @@ describe("PolymorphBattleground", function () {
     expect(fees.toString() === "80100000000000000"); // 0,0801 ETH
   });
 
+  it.only("Should Do the battle", async function () {
+    const { polymorphBattleground, polymorphsContract, battleStatsCalculator,  } = await loadFixture(deployContracts);
+
+    await battleStatsCalculator.initItems(ITEMS1);
+    await battleStatsCalculator.initItems(ITEMS2);
+
+    const randomNumber = ethers.BigNumber.from("8238110493506368787129191924534665123803515722583333737448633436947264152644");
+    const requestId = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+    //  Get signers
+    const signers = await hre.ethers.getSigners();
+
+    const participants = [];
+    const participantsCount = await polymorphBattleground.maxPoolSize();
+    for (let i = 0; i <= participantsCount; i++) {
+      participants.push(signers[i]);
+    };
+
+    // Mint polymorphs
+    const mintAndEnterPromises = participants.map(async (participant, index) => {
+      const polymorphId = index + 1;
+      const transactionMint = await polymorphsContract.mint(participant.address,polymorphId);
+      await transactionMint.wait();
+      const transactionEnter = await polymorphBattleground.connect(participant).enterBattle(polymorphId, 1, {value: ethers.utils.parseEther("1")});
+      await transactionEnter.wait();
+    });
+
+    await Promise.all(mintAndEnterPromises);
+
+    const lastEntityId = await polymorphBattleground.battlePools(0,39);
+    expect(lastEntityId.toNumber()).to.be.eq(participantsCount);
+
+    // Fulfill randomness
+    const vrfCoordinator = signers[0];
+    await polymorphBattleground.connect(vrfCoordinator).rawFulfillRandomness(requestId, randomNumber);
+
+    const vrfRandomNumber = await polymorphBattleground.randomNumber();
+    expect(vrfRandomNumber.toString()).to.not.be.eq("0");
+
+    await polymorphBattleground.finishRound();
+
+    const vrfRandomNumberAfterBattle = await polymorphBattleground.randomNumber();
+    expect(vrfRandomNumberAfterBattle.toString()).to.be.eq("0");
+  });
+  // TODO:: add beforeEach, also Before
+  // TODO:: use coverage hardhat
   // TODO:: Write tests for RandomConsumberNumber.sol => https://github.com/alexroan/truffle-tests-tutorial
 });
