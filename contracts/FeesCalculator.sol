@@ -21,9 +21,7 @@ contract FeesCalculator {
     function getFeesAmount(uint256 wager, uint256 ethAmount, uint256 poolLength, uint256 startRoundIncetive, uint256 finishRoundIncetive) public view returns (uint256) {
         uint256 daoFee = _calculateDAOfee(wager, daoFeeBps);
         uint256 operationalFee = _calculateOperationalFees(ethAmount, poolLength);
-        uint256 startRoundIncentiveFee = calculateIncetivise(startRoundIncetive, poolLength);
-        uint256 endRoundIncentiveFee = calculateIncetivise(finishRoundIncetive, poolLength);
-        return daoFee.add(operationalFee).add(startRoundIncentiveFee).add(endRoundIncentiveFee);
+        return daoFee.add(operationalFee).add(startRoundIncetive).add(finishRoundIncetive);
     }
 
     /// @notice Subtracts predefined fee which will be used for covering fees for calling executeRound() and getting LINK for random number generation.
