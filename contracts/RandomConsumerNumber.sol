@@ -42,7 +42,7 @@ contract RandomNumberConsumer is VRFConsumerBase {
     /**
      * Derives n more random numbers from that number
      */
-    function expand(uint256 randomValue, uint256 n) internal pure returns (uint256[] memory expandedValues) {
+    function expand(uint256 randomValue, uint256 n) public pure returns (uint256[] memory expandedValues) {
         expandedValues = new uint256[](n);
         for (uint256 i = 0; i < n; i++) {
             expandedValues[i] = uint256(keccak256(abi.encode(randomValue, i)));

@@ -335,26 +335,47 @@ describe("PolymorphBattleground", function () {
     expect(fees.toString() === "80100000000000000"); // 0,0801 ETH
   });
 
-  it.only("Should Do the battle", async function () {
-    const { polymorphBattleground, polymorphsContract, battleStatsCalculator,  } = await loadFixture(deployContracts);
+  // TODO:: use coverage hardhat
+  // TODO:: Write tests for RandomConsumberNumber.sol => https://github.com/alexroan/truffle-tests-tutorial
+});
 
-    await battleStatsCalculator.initItems(ITEMS1);
-    await battleStatsCalculator.initItems(ITEMS2);
 
-    const randomNumber = ethers.BigNumber.from("8238110493506368787129191924534665123803515722583333737448633436947264152644");
-    const requestId = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
-    //  Get signers
-    const signers = await hre.ethers.getSigners();
 
-    const participants = [];
-    const participantsCount = await polymorphBattleground.maxPoolSize();
-    for (let i = 0; i <= participantsCount; i++) {
-      participants.push(signers[i]);
-    };
+describe("Test of finishRound() method", function() {
+  const deployContracts = async () => {
+    const [vrfCoordinator] = await ethers.getSigners();
 
+    const PolymorphsContract = await ethers.getContractFactory("PolymorphWithGeneChanger");
+    const polymorphsContract = await PolymorphsContract.deploy();
+    await polymorphsContract.deployed();
+
+    const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
+    const polymorphBattleground = await PolymorphBattleground.deploy(
+      polymorphsContract.address,
+      DAO_ADDRESS,
+      UNISWAP_V3_ROUTER,
+      LINK_ADDRESS,
+      WETH_ADDRESS,
+      DAO_FEE_BPS,
+      OPERATIONAL_FEEBPS,
+      RNG_CHAINLINK_COST,
+      START_ROUND_INCETIVE,
+      END_ROUND_INCETIVE,
+      vrfCoordinator.address
+      );
+    await polymorphBattleground.deployed();
+
+    const BattleStatsCalculator = await ethers.getContractFactory("BattleStatsCalculator");
+    const battleStatsCalculator = await BattleStatsCalculator.deploy();
+    await battleStatsCalculator.deployed();
+
+    return { polymorphBattleground, polymorphsContract, battleStatsCalculator };
+  };
+
+  const mintPolymorphs = async (owners) => {
     // Mint polymorphs
-    const mintAndEnterPromises = participants.map(async (participant, index) => {
+    const mintAndEnterPromises = owners.map(async (participant, index) => {
       const polymorphId = index + 1;
       const transactionMint = await polymorphsContract.mint(participant.address,polymorphId);
       await transactionMint.wait();
@@ -363,23 +384,131 @@ describe("PolymorphBattleground", function () {
     });
 
     await Promise.all(mintAndEnterPromises);
+  }
 
-    const lastEntityId = await polymorphBattleground.battlePools(0,39);
-    expect(lastEntityId.toNumber()).to.be.eq(participantsCount);
+  let polymorphBattleground, polymorphsContract, battleStatsCalculator, signers, participants;
+
+  beforeEach(async function() {
+    // Deploy contracts
+    const contracts = await loadFixture(deployContracts);
+    polymorphBattleground = contracts.polymorphBattleground;
+    polymorphsContract = contracts.polymorphsContract;
+    battleStatsCalculator = contracts.battleStatsCalculator;
+
+    // Init items
+    await battleStatsCalculator.initItems(ITEMS1);
+    await battleStatsCalculator.initItems(ITEMS2);
+
+    //  Get signers
+    signers = await hre.ethers.getSigners();
+
+    participants = [];
+    const participantsCount = await polymorphBattleground.maxPoolSize();
+    for (let i = 0; i < participantsCount; i++) {
+      participants.push(signers[i]);
+    };
+  });
+
+  it("Entering without the needed players in the pool", async function () {
+    const randomNumber = ethers.BigNumber.from("8238110493506368787129191924534665123803515722583333737448633436947264152644");
+    const requestId = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
     // Fulfill randomness
     const vrfCoordinator = signers[0];
     await polymorphBattleground.connect(vrfCoordinator).rawFulfillRandomness(requestId, randomNumber);
 
-    const vrfRandomNumber = await polymorphBattleground.randomNumber();
-    expect(vrfRandomNumber.toString()).to.not.be.eq("0");
+    await expect(polymorphBattleground.finishRound()).revertedWith('Not enough polymorphs into the Battle Pool !');
+  });
+
+  it("Entering without randomNumber", async function () {
+    // Mint polymorphs
+    await mintPolymorphs(participants);
+    await expect(polymorphBattleground.finishRound()).revertedWith('Random Number is 0, please request a random number or wait for its fulfilment !');
+  });
+
+  it("Testing expand() function", async function () {
+    const randomNumber = ethers.BigNumber.from("8238110493506368787129191924534665123803515722583333737448633436947264152644");
+    const desiredCount = 2;
+    const randoms = await polymorphBattleground.expand(randomNumber, desiredCount);
+    expect(randoms.length).to.be.eq(desiredCount);
+  });
+
+  it("Starting fight with odd number of participants, transfers one into the next battle pool", async function () {
+    await mintPolymorphs(participants.slice(0, (participants.length / 2) - 1));
+
+    // Fulfill randomness
+    const randomNumber = ethers.BigNumber.from("8238110493506368787129191924534665123803515722583333737448633436947264152644");
+    const requestId = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    const vrfCoordinator = signers[0];
+    await polymorphBattleground.connect(vrfCoordinator).rawFulfillRandomness(requestId, randomNumber);
+
+    await polymorphBattleground.finishRound();
+    const roundIndex = await polymorphBattleground.roundIndex();
+    // It has transfered the odd entity into the next pool
+    await expect(polymorphBattleground.battlePools(roundIndex,0)).to.not.be.reverted;
+  });
+
+  it("Starting fight with even number of participants, dont transfer polymorph into the next battle pool", async function () {
+    await mintPolymorphs(participants);
+
+    // Fulfill randomness
+    const randomNumber = ethers.BigNumber.from("8238110493506368787129191924534665123803515722583333737448633436947264152644");
+    const requestId = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    const vrfCoordinator = signers[0];
+    await polymorphBattleground.connect(vrfCoordinator).rawFulfillRandomness(requestId, randomNumber);
+
+    await polymorphBattleground.finishRound();
+    const roundIndex = await polymorphBattleground.roundIndex();
+    // It has not transfered the an entity into the next pool, all fight have been done
+    await expect(polymorphBattleground.battlePools(roundIndex,0)).to.be.reverted;
+  });
+
+  it("randomNumber gets reset after the battle", async function () {
+    await mintPolymorphs(participants);
+
+    // Fulfill randomness
+    const randomNumber = ethers.BigNumber.from("8238110493506368787129191924534665123803515722583333737448633436947264152644");
+    const requestId = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    const vrfCoordinator = signers[0];
+    await polymorphBattleground.connect(vrfCoordinator).rawFulfillRandomness(requestId, randomNumber);
+
+    const vrfRandomNumberBefore = await polymorphBattleground.randomNumber();
+    expect(vrfRandomNumberBefore.toString()).to.not.be.eq("0");
 
     await polymorphBattleground.finishRound();
 
-    const vrfRandomNumberAfterBattle = await polymorphBattleground.randomNumber();
-    expect(vrfRandomNumberAfterBattle.toString()).to.be.eq("0");
+    const vrfRandomNumberAfter = await polymorphBattleground.randomNumber();
+    expect(vrfRandomNumberAfter.toString()).to.be.eq("0");
   });
-  // TODO:: add beforeEach, also Before
-  // TODO:: use coverage hardhat
-  // TODO:: Write tests for RandomConsumberNumber.sol => https://github.com/alexroan/truffle-tests-tutorial
+
+  it("roundIndex gets incremented after the battle", async function () {
+    await mintPolymorphs(participants);
+
+    // Fulfill randomness
+    const randomNumber = ethers.BigNumber.from("8238110493506368787129191924534665123803515722583333737448633436947264152644");
+    const requestId = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    const vrfCoordinator = signers[0];
+    await polymorphBattleground.connect(vrfCoordinator).rawFulfillRandomness(requestId, randomNumber);
+
+    const roundIndex = await polymorphBattleground.roundIndex();
+    expect(roundIndex.toString()).to.be.eq("0");
+
+    await polymorphBattleground.finishRound();
+
+    const roundIndexAfter = await polymorphBattleground.roundIndex();
+    const expectedRound= roundIndex.toNumber() + 1;
+    expect(roundIndexAfter.toString()).to.be.eq(expectedRound.toString());
+  });
+
+
+  it("swapAndPopEntity() removes entity from the pool", async function () {
+    await mintPolymorphs(participants);
+
+    const roundIndex = 0;
+    const index = 0;
+    const entityIdBefore = await polymorphBattleground.battlePools(roundIndex,index);
+    await polymorphBattleground.swapAndPopEntity(index);
+    const entityIdAfter = await polymorphBattleground.battlePools(roundIndex,index);
+    expect(entityIdBefore.toString()).to.not.be.eq(entityIdAfter.toString());
+  });
 });

@@ -328,7 +328,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     }
 
     /// @notice Moves battle entity to the end of the pool and pops it out
-    function swapAndPopEntity(uint256 polymoprhIndex) private {
+    function swapAndPopEntity(uint256 polymoprhIndex) public {
         uint256[] storage battlePool = battlePools[roundIndex];
 
         // If its not already the last element
