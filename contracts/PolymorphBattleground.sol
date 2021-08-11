@@ -156,19 +156,16 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
 
     /// @notice Backend (like Openzeppelin Defender) will call this function periodically
     /// It will make request for a random number using the Chainlink VRF
-    /// @param ethAmount ETH amount which will be used to swap for LINK
-    /// TODO:: research if there is a way to take the ethAmount needed for 0.1 LINK dynamically
-    function startRound(uint256 ethAmount) external {
+    function startRound() external {
         require(!inRound, "A round has already started, wait for it to finish !");
         require(battlePools[roundIndex].length >= minPoolSize, "Not enough polymorphs into the Battle Pool !");
-        require(roundFees * battlePools[roundIndex].length <= address(this).balance, "Not enough ETH in contract to pay Fees, the wager must be bigger or decrase the incentives !");
+
         // Indicate that a round has started, so no new entries cant be accepted in the current (roundIndex) fight pool
         // Also the fees for that roindIndex will be calculated
         inRound = true;
 
         // Calls Uniswap to swap ETH for LINK
-        // TODO:: if you send less ETH the transaction reverts
-        getLinkForRNGCosts(ethAmount);
+        getLinkForRNGCosts(address(this).balance);
 
         // Set the fees for the current round, based on the participants count and the paid ethAmount for LINK
         roundFees = getFeesAmount(
@@ -181,8 +178,6 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
 
         // Makes the actual call for random number
         getRandomNumber();
-        // TODO:: Should we decrease player balances based on the fees upon starting the round
-        // so no one will be able to claim rewards without paying the fees
 
         // return Incentive fee per polymorph (DAO configurable) to the function caller
         uint256 callerIncetiveAmount = calculateIncetivise(startRoundIncetive, battlePools[roundIndex].length);
@@ -197,6 +192,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         uint256[] storage battlePool = battlePools[roundIndex];
         require(battlePool.length >= minPoolSize, "Not enough polymorphs into the Battle Pool !");
         require(randomNumber != 0, "Random Number is 0, please request a random number or wait for its fulfilment !");
+        require(roundFees * battlePools[roundIndex].length <= address(this).balance, "Not enough ETH in contract to pay Fees, the wager must be bigger or decrase the incentives !");
 
         uint256 participants = battlePool.length;
 
