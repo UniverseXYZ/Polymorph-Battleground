@@ -21,12 +21,27 @@ module.exports = async function () {
     const DAO_FEE_BPS = process.env.DAO_FEE_BPS;
     const OPERATIONAL_FEE_BPS = process.env.OPERATIONAL_FEE_BPS;
     const LINK_COST = process.env.LINK_COST;
+    const START_ROUND_INCETIVE = process.env.START_ROUND_INCETIVE;
+    const END_ROUND_INCETIVE = process.env.END_ROUND_INCETIVE;
+    const VRF_COORDINATOR_ADDRESS = process.env.VRF_COORDINATOR_ADDRESS;
 
     if (!Battleground) {
 
       const polymorphBattlegroundDeployment = await deployments.deploy("PolymorphBattleground", {
         from: namedAccounts.deployer,
-        args: [POLYMORPHS_CONTRACT_ADDRESS, DAO_ADDRESS, UNISWAP_SWAP_ROUTER_ADDRESS, LINK_ADDRESS, WETH_ADDRESS, DAO_FEE_BPS, OPERATIONAL_FEE_BPS, LINK_COST],
+        args: [
+          POLYMORPHS_CONTRACT_ADDRESS,
+          DAO_ADDRESS,
+          UNISWAP_SWAP_ROUTER_ADDRESS,
+          LINK_ADDRESS,
+          WETH_ADDRESS,
+          DAO_FEE_BPS,
+          OPERATIONAL_FEE_BPS,
+          LINK_COST,
+          START_ROUND_INCETIVE,
+          END_ROUND_INCETIVE,
+          VRF_COORDINATOR_ADDRESS,
+        ]
       });
 
       console.log("PolymorphBattleground deployed to:", polymorphBattlegroundDeployment.address);

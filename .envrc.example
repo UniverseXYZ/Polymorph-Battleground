@@ -7,12 +7,6 @@ export INFURA_API_KEY=''
 # Used for verifying contracts on Etherscan
 export ETHERSCAN_API_KEY=''
 
-# Royalty fee BPS
-export ROYALTY_FEE_BPS='0'
-
-# DAO address
-export DAO_ADDRESS=''
-
 # On test reports gas if exist
 export REPORT_GAS='true'
 
@@ -21,6 +15,9 @@ export CMC_API_KEY=''
 
 # Polymorph contarct address
 export POLYMORPHS_CONTRACT_ADDRESS=''
+
+# DAO address
+export DAO_ADDRESS=''
 
 # Uniswap V3 address
 export UNISWAP_SWAP_ROUTER_ADDRESS=''
@@ -40,5 +37,23 @@ export OPERATIONAL_FEE_BPS=''
 # CHAIN LINK RNG GCOST
 export LINK_COST=''
 
-# BATTLE POOLS WAGERS
-export POOLS=[100000000000000000]
+# START ROUND INCENTIVE // 0,005 ETH
+export START_ROUND_INCETIVE=5000000000000000
+
+# FINISH ROUND INCENTIVE // 0.01 ETH
+END_ROUND_INCETIVE = 10000000000000000
+
+# VRF COORDINATOR ADDRESS
+VRF_COORDINATOR_ADDRESS=''
+
+# GAME ITEMS
+ITEMS_1=[
+     [ genePosition: 0, itemIndex: 0, aMin: 1, aMax: 50, dMin: 1, dMax: 50 ] // NOT PART OF THE CONFIG JUST DESCRIPTIVE EXAMPLE
+     [0, 1, 1, 100, 1, 150] // REAL EXAMPLE
+]
+
+# GAME ITEMS
+ITEMS_2=[
+     [ genePosition: 0, itemIndex: 0, aMin: 1, aMax: 50, dMin: 1, dMax: 50 ] // NOT PART OF THE CONFIG JUST DESCRIPTIVE EXAMPLE
+     [0, 1, 1, 100, 1, 150] // REAL EXAMPLE
+]
