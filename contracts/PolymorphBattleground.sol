@@ -38,6 +38,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     mapping(address => uint256) public playerBalances;
     mapping(uint256 => mapping(uint256 => BattleEntity)) public entities; //battlePoolIndex => polymorphId => BattleEntity
     mapping(uint256 => uint256[]) public battlePools; // battlePoolIndex => [22,23] polymorphs ids
+    mapping(address => uint256) public participatedBattlePoolIndex;
 
     event LogBattleEntered(
         uint256 polymorphId,
@@ -134,8 +135,11 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         entity.skillType = skillType;
         entity.owner = msg.sender;
 
-        // 6. Enter the battlePools with the polymorphId
+        // Enter the battlePools with the polymorphId
         battlePools[battlePoolIndex].push(polymorphId);
+
+        // Cache participated battlePoolIndex
+        participatedBattlePoolIndex[msg.sender] = battlePoolIndex;
 
         emit LogBattleEntered(
             polymorphId,
@@ -165,7 +169,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         inRound = true;
 
         // Calls Uniswap to swap ETH for LINK
-        getLinkForRNGCosts(address(this).balance);
+        getLinkForRNGCosts();
 
         // Set the fees for the current round, based on the participants count and the paid ethAmount for LINK
         roundFees = getFeesAmount(
@@ -291,10 +295,15 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
             if (entities[battlePoolIndex][newEntityId].id == 0) {
                 entities[battlePoolIndex][newEntityId] = newEntity;
                 battlePools[battlePoolIndex].push(newEntityId);
-                // Push the polymoph id into the new active pool
+
+                // Cache participated battlePoolIndex
+                participatedBattlePoolIndex[msg.sender] = battlePoolIndex;
             } else {
                 entities[battlePoolIndex + 1][newEntityId] = newEntity;
                 battlePools[battlePoolIndex + 1].push(newEntityId);
+
+                // Cache participated battlePoolIndex
+                participatedBattlePoolIndex[msg.sender] = battlePoolIndex + 1;
             }
         }
 
@@ -339,11 +348,10 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
 
     /// @notice Claims the available balance of player
     function claimRewards() external nonReentrant {
-        // TODO:: should the user be able to claim rewards if it's in round ?
-        // TODO:: or we should substract their balance upon round start ?
-        address payable recipient = payable(msg.sender);
+        require(participatedBattlePoolIndex[msg.sender] < roundIndex, "You have joined pool which is still in execution or has not been started yet !");
         require(playerBalances[msg.sender] > 0, "Balance is zero");
 
+        address payable recipient = payable(msg.sender);
         uint256 ethTransferAmount = playerBalances[msg.sender];
         playerBalances[msg.sender] = 0;
         (bool success, ) = recipient.call{value: ethTransferAmount}("");

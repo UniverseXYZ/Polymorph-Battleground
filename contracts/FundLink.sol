@@ -28,12 +28,9 @@ contract FundLink is ReentrancyGuard {
     }
 
     /// @notice converts it to LINK, so costs can be coverd for RNG generation
-    /// @param ethAmount ETH amount to swap for link - difference is refunded
-    function getLinkForRNGCosts(uint256 ethAmount) internal nonReentrant {
-        require(ethAmount > 0, "Must pass non 0 ETH amount");
+    function getLinkForRNGCosts() internal nonReentrant {
+        uint256 ethAmount = address(this).balance;
         uint256 linkAmount = rngChainlinkCost;
-
-        require(ethAmount <= address(this).balance, "The contract doesn't have that much ETH !");
 
         uint256 deadline = block.timestamp + 60;
         address tokenIn = wethAddress;
@@ -55,9 +52,8 @@ contract FundLink is ReentrancyGuard {
             sqrtPriceLimitX96
         );
 
-        uint256 amountIn = uniswapV3Router.exactOutputSingle{ value: ethAmount }(params);
-        uint256 paid = ethAmount.sub(amountIn);
-        setPaidEthAmountForLinkSwap(paid);
+        uint256 paidAmount = uniswapV3Router.exactOutputSingle{ value: ethAmount }(params);
+        setPaidEthAmountForLinkSwap(paidAmount);
         // In case the user sends more ETH, refund leftover ETH to user
         uniswapV3Router.refundETH();
 
