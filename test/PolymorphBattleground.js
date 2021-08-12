@@ -243,56 +243,96 @@ const ITEMS2 = [
   [8, 31, 1, 100, 1, 50]
 ];
 
-/**
- * TODO:: test cases for constructor()
- * - All passed variables are cached into the contract
- */
+// Initializer functions, could be overwriten in need
+const deployContracts = async () => {
+  const [vrfCoordinator] = await ethers.getSigners();
+
+  const PolymorphsContract = await ethers.getContractFactory("PolymorphWithGeneChanger");
+  const polymorphsContract = await PolymorphsContract.deploy();
+  await polymorphsContract.deployed();
+
+  const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
+  const polymorphBattleground = await PolymorphBattleground.deploy(
+    polymorphsContract.address,
+    DAO_ADDRESS,
+    UNISWAP_V3_ROUTER,
+    LINK_ADDRESS,
+    WETH_ADDRESS,
+    DAO_FEE_BPS,
+    OPERATIONAL_FEEBPS,
+    RNG_CHAINLINK_COST,
+    START_ROUND_INCETIVE,
+    END_ROUND_INCETIVE,
+    vrfCoordinator.address
+    );
+  await polymorphBattleground.deployed();
+
+  const BattleStatsCalculator = await ethers.getContractFactory("BattleStatsCalculator");
+  const battleStatsCalculator = await BattleStatsCalculator.deploy();
+  await battleStatsCalculator.deployed();
+
+  return { polymorphBattleground, polymorphsContract, battleStatsCalculator };
+};
+
+const mintPolymorphs = async (owners) => {
+  // Mint polymorphs
+  const mintAndEnterPromises = owners.map(async (participant, index) => {
+    const polymorphId = index + 1;
+    const transactionMint = await polymorphsContract.mint(participant.address,polymorphId);
+    await transactionMint.wait();
+    const transactionEnter = await polymorphBattleground.connect(participant).enterBattle(polymorphId, 1, {value: ethers.utils.parseEther("1")});
+    await transactionEnter.wait();
+  });
+
+  await Promise.all(mintAndEnterPromises);
+}
+
+let polymorphBattleground, polymorphsContract, battleStatsCalculator, signers, participants;
+
+describe("Test of constructor()", function() {
+  beforeEach(async function() {
+    // Deploy contracts
+    const contracts = await loadFixture(deployContracts);
+    polymorphBattleground = contracts.polymorphBattleground;
+    polymorphsContract = contracts.polymorphsContract;
+    battleStatsCalculator = contracts.battleStatsCalculator;
+  });
+
+  it("All passed variables are cached into the contract", async function () {
+
+    const polymorphContractAddress = await polymorphBattleground.polymorphsContractAddress();
+    expect(polymorphContractAddress.toString()).to.be.eq(polymorphsContract.address.toString());
+
+    const daoAddress = await polymorphBattleground.daoAddress();
+    expect(daoAddress.toString()).to.be.eq(DAO_ADDRESS);
+
+    const router = await polymorphBattleground.uniswapV3Router();
+    expect(router).to.be.eq(UNISWAP_V3_ROUTER);
+
+    const linkAddress = await polymorphBattleground.linkAddress();
+    expect(linkAddress).to.be.eq(LINK_ADDRESS);
+
+    const wethAddress = await polymorphBattleground.wethAddress();
+    expect(wethAddress.toLowerCase()).to.be.eq(WETH_ADDRESS.toLowerCase());
+
+    const daoFeeBps = await polymorphBattleground.daoFeeBps();
+    expect(daoFeeBps).to.be.eq(DAO_FEE_BPS);
+
+    const operationalFeeBps = await polymorphBattleground.operationalFeeBps();
+    expect(operationalFeeBps).to.be.eq(OPERATIONAL_FEEBPS);
+
+    const rngChainlinkCost = await polymorphBattleground.rngChainlinkCost();
+    expect(rngChainlinkCost).to.be.eq(RNG_CHAINLINK_COST);
+
+    const startRoundIncetive = await polymorphBattleground.startRoundIncetive();
+    expect(startRoundIncetive).to.be.eq(START_ROUND_INCETIVE);
+
+    const finishRoundIncetive = await polymorphBattleground.finishRoundIncetive();
+    expect(finishRoundIncetive).to.be.eq(END_ROUND_INCETIVE);
+  });
+});
+
 describe("Tests for enterBattle() method: ", function () {
-  const deployContracts = async () => {
-    const [vrfCoordinator] = await ethers.getSigners();
-
-    const PolymorphsContract = await ethers.getContractFactory("PolymorphWithGeneChanger");
-    const polymorphsContract = await PolymorphsContract.deploy();
-    await polymorphsContract.deployed();
-
-    const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
-    const polymorphBattleground = await PolymorphBattleground.deploy(
-      polymorphsContract.address,
-      DAO_ADDRESS,
-      UNISWAP_V3_ROUTER,
-      LINK_ADDRESS,
-      WETH_ADDRESS,
-      DAO_FEE_BPS,
-      OPERATIONAL_FEEBPS,
-      RNG_CHAINLINK_COST,
-      START_ROUND_INCETIVE,
-      END_ROUND_INCETIVE,
-      vrfCoordinator.address
-      );
-    await polymorphBattleground.deployed();
-
-    const BattleStatsCalculator = await ethers.getContractFactory("BattleStatsCalculator");
-    const battleStatsCalculator = await BattleStatsCalculator.deploy();
-    await battleStatsCalculator.deployed();
-
-    return { polymorphBattleground, polymorphsContract, battleStatsCalculator };
-  };
-
-  const mintPolymorphs = async (owners) => {
-    // Mint polymorphs
-    const mintAndEnterPromises = owners.map(async (participant, index) => {
-      const polymorphId = index + 1;
-      const transactionMint = await polymorphsContract.mint(participant.address,polymorphId);
-      await transactionMint.wait();
-      const transactionEnter = await polymorphBattleground.connect(participant).enterBattle(polymorphId, 1, {value: ethers.utils.parseEther("1")});
-      await transactionEnter.wait();
-    });
-
-    await Promise.all(mintAndEnterPromises);
-  }
-
-  let polymorphBattleground, polymorphsContract, battleStatsCalculator, signers, participants;
-
   beforeEach(async function() {
     // Deploy contracts
     const contracts = await loadFixture(deployContracts);
@@ -392,7 +432,7 @@ describe("Tests for enterBattle() method: ", function () {
     await expect(polymorphId).to.be.eq(entitiyId.toNumber());
   });
 
-  it.only("user participatedBattlePoolIndex is getting updated after join", async function () {
+  it("user participatedBattlePoolIndex is getting updated after join", async function () {
     // First enter and fill the pool so that if enters the next pool we can check the index again
     await mintPolymorphs(participants);
 
@@ -407,7 +447,6 @@ describe("Tests for enterBattle() method: ", function () {
 
     const participatedIndexAfter = await polymorphBattleground.participatedBattlePoolIndex(signer.address);
 
-    console.log(participatedIndexAfter.toString());
     await expect(participatedIndex.toNumber()).to.be.lessThan(participatedIndexAfter.toNumber());
 
   });
@@ -477,53 +516,7 @@ describe("Tests for enterBattle() method: ", function () {
   // TODO:: Write tests for RandomConsumberNumber.sol => https://github.com/alexroan/truffle-tests-tutorial
 });
 
-
 describe("Test of finishRound() method", function() {
-  const deployContracts = async () => {
-    const [vrfCoordinator] = await ethers.getSigners();
-
-    const PolymorphsContract = await ethers.getContractFactory("PolymorphWithGeneChanger");
-    const polymorphsContract = await PolymorphsContract.deploy();
-    await polymorphsContract.deployed();
-
-    const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
-    const polymorphBattleground = await PolymorphBattleground.deploy(
-      polymorphsContract.address,
-      DAO_ADDRESS,
-      UNISWAP_V3_ROUTER,
-      LINK_ADDRESS,
-      WETH_ADDRESS,
-      DAO_FEE_BPS,
-      OPERATIONAL_FEEBPS,
-      RNG_CHAINLINK_COST,
-      START_ROUND_INCETIVE,
-      END_ROUND_INCETIVE,
-      vrfCoordinator.address
-      );
-    await polymorphBattleground.deployed();
-
-    const BattleStatsCalculator = await ethers.getContractFactory("BattleStatsCalculator");
-    const battleStatsCalculator = await BattleStatsCalculator.deploy();
-    await battleStatsCalculator.deployed();
-
-    return { polymorphBattleground, polymorphsContract, battleStatsCalculator };
-  };
-
-  const mintPolymorphs = async (owners) => {
-    // Mint polymorphs
-    const mintAndEnterPromises = owners.map(async (participant, index) => {
-      const polymorphId = index + 1;
-      const transactionMint = await polymorphsContract.mint(participant.address,polymorphId);
-      await transactionMint.wait();
-      const transactionEnter = await polymorphBattleground.connect(participant).enterBattle(polymorphId, 1, {value: ethers.utils.parseEther("1")});
-      await transactionEnter.wait();
-    });
-
-    await Promise.all(mintAndEnterPromises);
-  }
-
-  let polymorphBattleground, polymorphsContract, battleStatsCalculator, signers, participants;
-
   beforeEach(async function() {
     // Deploy contracts
     const contracts = await loadFixture(deployContracts);
@@ -646,30 +639,167 @@ describe("Test of finishRound() method", function() {
     const entityIdAfter = await polymorphBattleground.battlePools(roundIndex,index);
     expect(entityIdBefore.toString()).to.not.be.eq(entityIdAfter.toString());
   });
-
-  // TODO:: test the incentivise functionality of finishRound()
 });
 
+describe("Test of claimRewards()", function() {
+  beforeEach(async function() {
+    // Deploy contracts
+    const contracts = await loadFixture(deployContracts);
+    polymorphBattleground = contracts.polymorphBattleground;
+    polymorphsContract = contracts.polymorphsContract;
+    battleStatsCalculator = contracts.battleStatsCalculator;
 
-/*
- Test cases:
-1. claimRewards() functionality
-  - player cannot claim rewards if its featured to fight in upcomming round
-  - player cannot claim if has no balance
-  - player balance gets reset after claim
-  - player address balance gets increased after claim
-2. saveRandomNumber() functionality
-  - saves the random number
-3. setStartRoundIncentive() functionality
-  - Only DAO can call it
-  - changes startRoundIncentive amount
-4. setFinishRoundIncentive() functionality
-  - Only DAO can call it
-  - changes finishRoundIncentive amount
-5. startRound() functionality
-  - cannot start round if there is an currently active round
-  - cannot start round if there are not enough participants in the pool
+    // Init items
+    await battleStatsCalculator.initItems(ITEMS1);
+    await battleStatsCalculator.initItems(ITEMS2);
 
-  // TODO:: Think about
-  - how to test FundLink.sol functionality
-*/
+    //  Get signers
+    signers = await hre.ethers.getSigners();
+
+    participants = [];
+    const participantsCount = await polymorphBattleground.maxPoolSize();
+    for (let i = 0; i < participantsCount.toNumber(); i++) {
+      participants.push(signers[i]);
+    };
+  });
+
+  it("player cannot claim rewards if its featured to fight in upcomming round", async function () {
+    const signer = signers[0];
+    await polymorphsContract.mint(signer.address, 2);
+    await polymorphBattleground.enterBattle(2, 1, {value: ethers.utils.parseEther("1")});
+    await expect(polymorphBattleground.connect(signer).claimRewards()).revertedWith('You have joined pool which is still in execution or has not been started yet !');
+  });
+
+  it("player cannot claim if has no balance", async function () {
+    const signer = signers[0];
+    await expect(polymorphBattleground.connect(signer).claimRewards()).revertedWith('User Balance is zero');
+  });
+
+  it("player balance gets reset after claim", async function () {
+    const signer = signers[0];
+    await mintPolymorphs(participants);
+
+    // Fulfill randomness
+    const randomNumber = ethers.BigNumber.from("8238110493506368787129191924534665123803515722583333737448633436947264152644");
+    const requestId = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    const vrfCoordinator = signers[0];
+    await polymorphBattleground.connect(vrfCoordinator).rawFulfillRandomness(requestId, randomNumber);
+
+    await polymorphBattleground.finishRound();
+    await expect(polymorphBattleground.connect(signer).claimRewards()).revertedWith('User Balance is zero');
+  });
+});
+
+describe("Test of saveRandomNumber()", function() {
+  beforeEach(async function() {
+    // Deploy contracts
+    const contracts = await loadFixture(deployContracts);
+    polymorphBattleground = contracts.polymorphBattleground;
+    polymorphsContract = contracts.polymorphsContract;
+    battleStatsCalculator = contracts.battleStatsCalculator;
+
+    // Init items
+    await battleStatsCalculator.initItems(ITEMS1);
+    await battleStatsCalculator.initItems(ITEMS2);
+
+    //  Get signers
+    signers = await hre.ethers.getSigners();
+
+    participants = [];
+    const participantsCount = await polymorphBattleground.maxPoolSize();
+    for (let i = 0; i < participantsCount.toNumber(); i++) {
+      participants.push(signers[i]);
+    };
+  });
+
+  it("saves the random number", async function () {
+    await mintPolymorphs(participants);
+
+  // Fulfill randomness
+    const randomNumber = ethers.BigNumber.from("8238110493506368787129191924534665123803515722583333737448633436947264152644");
+    const requestId = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    const vrfCoordinator = signers[0];
+    await polymorphBattleground.connect(vrfCoordinator).rawFulfillRandomness(requestId, randomNumber);
+
+    const savedRandomNumber = await polymorphBattleground.randomNumber();
+    expect(savedRandomNumber.toString()).to.not.eq("0");
+  });
+});
+
+describe("Test of setStartRoundIncentive() and setFinishRoundIncentive()", function() {
+  const deployContracts = async () => {
+    const [vrfCoordinator, dao] = await ethers.getSigners();
+
+    const PolymorphsContract = await ethers.getContractFactory("PolymorphWithGeneChanger");
+    const polymorphsContract = await PolymorphsContract.deploy();
+    await polymorphsContract.deployed();
+
+    const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
+    const polymorphBattleground = await PolymorphBattleground.deploy(
+      polymorphsContract.address,
+      dao.address,
+      UNISWAP_V3_ROUTER,
+      LINK_ADDRESS,
+      WETH_ADDRESS,
+      DAO_FEE_BPS,
+      OPERATIONAL_FEEBPS,
+      RNG_CHAINLINK_COST,
+      START_ROUND_INCETIVE,
+      END_ROUND_INCETIVE,
+      vrfCoordinator.address
+      );
+    await polymorphBattleground.deployed();
+
+    const BattleStatsCalculator = await ethers.getContractFactory("BattleStatsCalculator");
+    const battleStatsCalculator = await BattleStatsCalculator.deploy();
+    await battleStatsCalculator.deployed();
+
+    return { polymorphBattleground, polymorphsContract, battleStatsCalculator };
+  };
+  beforeEach(async function() {
+    // Deploy contracts
+    const contracts = await loadFixture(deployContracts);
+    polymorphBattleground = contracts.polymorphBattleground;
+    polymorphsContract = contracts.polymorphsContract;
+    battleStatsCalculator = contracts.battleStatsCalculator;
+
+    // Init items
+    await battleStatsCalculator.initItems(ITEMS1);
+    await battleStatsCalculator.initItems(ITEMS2);
+
+    //  Get signers
+    signers = await hre.ethers.getSigners();
+
+    participants = [];
+    const participantsCount = await polymorphBattleground.maxPoolSize();
+    for (let i = 0; i < participantsCount.toNumber(); i++) {
+      participants.push(signers[i]);
+    };
+  });
+
+  it("Only DAO can call setStartRoundIncentive", async function () {
+    await expect(polymorphBattleground.setStartRoundIncentive("10")).revertedWith('Not called from the dao');
+  });
+
+  it("Only DAO can call setFinishRoundIncentive", async function () {
+    await expect(polymorphBattleground.setFinishRoundIncentive("10")).revertedWith('Not called from the dao');
+  });
+
+  it("changes startRoundIncentive amount", async function () {
+    const [vrfCoordinator, dao] = await ethers.getSigners();
+
+    const incentive = await polymorphBattleground.startRoundIncetive();
+    await polymorphBattleground.connect(dao).setStartRoundIncentive("10");
+    const incentiveAfter = await polymorphBattleground.startRoundIncetive();
+    expect(incentive.toNumber()).to.not.be.eq(incentiveAfter.toNumber());
+  });
+
+  it("changes finishRoundIncentive amount", async function () {
+    const [vrfCoordinator, dao] = await ethers.getSigners();
+
+    const incentive = await polymorphBattleground.finishRoundIncetive();
+    await polymorphBattleground.connect(dao).setFinishRoundIncentive("10");
+    const incentiveAfter = await polymorphBattleground.finishRoundIncetive();
+    expect(incentive.toString()).to.not.be.eq(incentiveAfter.toString());
+  });
+});

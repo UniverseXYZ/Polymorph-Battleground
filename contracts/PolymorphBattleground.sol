@@ -12,8 +12,8 @@ import "./FundLink.sol";
 contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomNumberConsumer, ReentrancyGuard, FundLink {
     using SafeMath for uint256;
 
-    address private polymorphsContractAddress;
-    address payable private daoAddress;
+    address public polymorphsContractAddress;
+    address payable public daoAddress;
 
     struct BattleEntity {
         uint256 id;
@@ -349,8 +349,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
 
     /// @notice Claims the available balance of player
     function claimRewards() external nonReentrant {
+        require(playerBalances[msg.sender] > 0, "User Balance is zero");
         require(participatedBattlePoolIndex[msg.sender] < roundIndex, "You have joined pool which is still in execution or has not been started yet !");
-        require(playerBalances[msg.sender] > 0, "Balance is zero");
 
         address payable recipient = payable(msg.sender);
         uint256 ethTransferAmount = playerBalances[msg.sender];

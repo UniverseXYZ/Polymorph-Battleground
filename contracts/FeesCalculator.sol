@@ -6,8 +6,8 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 contract FeesCalculator {
     using SafeMath for uint256;
 
-    uint256 private daoFeeBps;
-    uint256 private operationalFeeBps;
+    uint256 public daoFeeBps;
+    uint256 public operationalFeeBps;
 
     constructor(uint256 _daoFeeBps, uint256 _operationalFeeBps) {
         daoFeeBps = _daoFeeBps;

@@ -9,10 +9,10 @@ import "./IUniswapV3Router.sol";
 contract FundLink is ReentrancyGuard {
     using SafeMath for uint256;
 
-    address private linkAddress;
-    address private wethAddress;
-    uint256 private rngChainlinkCost;
-    IUniswapV3Router private uniswapV3Router;
+    address public linkAddress;
+    address public wethAddress;
+    uint256 public rngChainlinkCost;
+    IUniswapV3Router public uniswapV3Router;
 
     event LogLinkExchanged(
         uint256 amount,
