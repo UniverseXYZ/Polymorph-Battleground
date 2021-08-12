@@ -12,7 +12,6 @@ library PolymorphGeneParser {
         uint256[] memory genePairs = new uint256[](genePairsCount);
         uint256 index = 0;
 
-        // TODO:: think of the case when you have 00, comment by George
         while (genes != 0) {
             uint256 lastDigits = uint256(genes - (genes / 100) * 100); // returns the last 2 digits
             genePairs[index] = lastDigits;

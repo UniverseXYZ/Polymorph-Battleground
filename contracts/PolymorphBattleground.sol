@@ -103,8 +103,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         require(polymorphsContract.ownerOf(polymorphId) == msg.sender, "You must be the owner of the polymorph");
 
         // Handle owner already registered for the battlePoolIndex
-        BattleEntity storage entity = entities[battlePoolIndex][polymorphId];
-        require(entity.id == 0, "You have already registered for the current battle pool");
+        require(entities[battlePoolIndex][polymorphId].id == 0, "You have already registered for the current battle pool");
 
         // Increment the player balance with the wager amount, the fees will be deducted after battle
         playerBalances[msg.sender] = playerBalances[msg.sender].add(msg.value);
@@ -125,6 +124,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
             battlePools[battlePoolIndex].length == maxPoolSize ||
             inRound && battlePoolIndex == roundIndex
             ) battlePoolIndex++;
+
+        BattleEntity storage entity = entities[battlePoolIndex][polymorphId];
 
         (uint256 min, uint256 max) = getStatsPoints(polymorphId, skillType);
 

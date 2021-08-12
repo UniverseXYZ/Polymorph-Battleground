@@ -243,7 +243,11 @@ const ITEMS2 = [
   [8, 31, 1, 100, 1, 50]
 ];
 
-describe("PolymorphBattleground", function () {
+/**
+ * TODO:: test cases for constructor()
+ * - All passed variables are cached into the contract
+ */
+describe("Tests for enterBattle() method: ", function () {
   const deployContracts = async () => {
     const [vrfCoordinator] = await ethers.getSigners();
 
@@ -273,6 +277,140 @@ describe("PolymorphBattleground", function () {
 
     return { polymorphBattleground, polymorphsContract, battleStatsCalculator };
   };
+
+  const mintPolymorphs = async (owners) => {
+    // Mint polymorphs
+    const mintAndEnterPromises = owners.map(async (participant, index) => {
+      const polymorphId = index + 1;
+      const transactionMint = await polymorphsContract.mint(participant.address,polymorphId);
+      await transactionMint.wait();
+      const transactionEnter = await polymorphBattleground.connect(participant).enterBattle(polymorphId, 1, {value: ethers.utils.parseEther("1")});
+      await transactionEnter.wait();
+    });
+
+    await Promise.all(mintAndEnterPromises);
+  }
+
+  let polymorphBattleground, polymorphsContract, battleStatsCalculator, signers, participants;
+
+  beforeEach(async function() {
+    // Deploy contracts
+    const contracts = await loadFixture(deployContracts);
+    polymorphBattleground = contracts.polymorphBattleground;
+    polymorphsContract = contracts.polymorphsContract;
+    battleStatsCalculator = contracts.battleStatsCalculator;
+
+    // Init items
+    await battleStatsCalculator.initItems(ITEMS1);
+    await battleStatsCalculator.initItems(ITEMS2);
+
+    //  Get signers
+    signers = await hre.ethers.getSigners();
+
+    participants = [];
+    const participantsCount = await polymorphBattleground.maxPoolSize();
+    for (let i = 0; i < participantsCount.toNumber(); i++) {
+      participants.push(signers[i]);
+    };
+  });
+
+  it("User cannot enter the battle if not enough ETH amount is sent", async function () {
+    const signer = signers[0]
+    await polymorphsContract.mint(signer.address, 2);
+    await expect(polymorphBattleground.enterBattle(2, 1)).revertedWith('Not enough ETH amount sent to enter the pool !');
+  });
+
+  it("User cannot enter the battle pool with the same polymorph twice", async function () {
+    const signer = signers[0]
+    await polymorphsContract.mint(signer.address, 2);
+    await polymorphBattleground.enterBattle(2, 1, {value: ethers.utils.parseEther("1")});
+    await expect(polymorphBattleground.enterBattle(2, 1, {value: ethers.utils.parseEther("1")})).revertedWith('You have already registered for the current battle pool');
+  });
+
+  it("User should be the owner of the polymorph", async function () {
+    const signer = signers[0];
+    const signer1 = signers[1];
+    await polymorphsContract.mint(signer.address, 2);
+    await expect(polymorphBattleground.connect(signer1).enterBattle(2, 1, {value: ethers.utils.parseEther("1")})).revertedWith('ou must be the owner of the polymorph');
+  });
+
+  it("User balance gets updated after entering a battle pool", async function () {
+    const signer = signers[0];
+    await polymorphsContract.mint(signer.address, 2);
+    const userBalanceBefore = await polymorphBattleground.playerBalances(signer.address);
+    await polymorphBattleground.enterBattle(2, 1, {value: ethers.utils.parseEther("1")});
+    const userBalanceAfter = await polymorphBattleground.playerBalances(signer.address);
+    await expect(parseInt(userBalanceBefore.toString())).to.be.lessThan(parseInt(userBalanceAfter.toString()));
+  });
+
+  it("User joins the next battlePool if the current one is full", async function () {
+    // Fill the battle pool
+    await mintPolymorphs(participants);
+
+    const signer = signers[0];
+    const polymorphId = 222;
+    const battlePoolIindexBefore = await polymorphBattleground.battlePoolIndex();
+
+    await polymorphsContract.mint(signer.address, polymorphId);
+    await polymorphBattleground.enterBattle(polymorphId, 1, {value: ethers.utils.parseEther("1")});
+
+    const battlePoolIindexAfter = await polymorphBattleground.battlePoolIndex();
+    await expect(battlePoolIindexBefore.toNumber()).to.be.lessThan(battlePoolIindexAfter.toNumber());
+
+    const entitiyId = await polymorphBattleground.battlePools(battlePoolIindexAfter, 0);
+    await expect(polymorphId).to.be.eq(entitiyId.toNumber());
+
+    const entitiy = await polymorphBattleground.entities(battlePoolIindexAfter.toNumber(), entitiyId.toNumber());
+    await expect(polymorphId).to.be.eq(entitiy.id.toNumber());
+  });
+
+  it("battleEntity is created if user joins the pool", async function () {
+    // Fill the battle pool
+    const signer = signers[0];
+    const polymorphId = 222;
+
+    await polymorphsContract.mint(signer.address, polymorphId);
+    await polymorphBattleground.enterBattle(polymorphId, 1, {value: ethers.utils.parseEther("1")});
+
+    const battlePoolIindex = await polymorphBattleground.battlePoolIndex();
+
+    const entitiy = await polymorphBattleground.entities(battlePoolIindex.toNumber(), polymorphId);
+    await expect(polymorphId).to.be.eq(entitiy.id.toNumber());
+  });
+
+  it("entitiyId is put into the pool upon joining it", async function () {
+    // Fill the battle pool
+    const signer = signers[0];
+    const polymorphId = 222;
+
+    await polymorphsContract.mint(signer.address, polymorphId);
+    await polymorphBattleground.enterBattle(polymorphId, 1, {value: ethers.utils.parseEther("1")});
+
+    const battlePoolIindex = await polymorphBattleground.battlePoolIndex();
+
+    const entitiyId = await polymorphBattleground.battlePools(battlePoolIindex, 0);
+    await expect(polymorphId).to.be.eq(entitiyId.toNumber());
+  });
+
+  it.only("user participatedBattlePoolIndex is getting updated after join", async function () {
+    // First enter and fill the pool so that if enters the next pool we can check the index again
+    await mintPolymorphs(participants);
+
+    // Fill the battle pool
+    const signer = signers[0];
+    const polymorphId = 222;
+
+    const participatedIndex = await polymorphBattleground.participatedBattlePoolIndex(signer.address);
+
+    await polymorphsContract.connect(signer).mint(signer.address, polymorphId);
+    await polymorphBattleground.connect(signer).enterBattle(polymorphId, 1, {value: ethers.utils.parseEther("1")});
+
+    const participatedIndexAfter = await polymorphBattleground.participatedBattlePoolIndex(signer.address);
+
+    console.log(participatedIndexAfter.toString());
+    await expect(participatedIndex.toNumber()).to.be.lessThan(participatedIndexAfter.toNumber());
+
+  });
 
   it("Should calculate stats based on Gene", async function () {
     const { battleStatsCalculator, polymorphsContract } = await loadFixture(deployContracts);
@@ -340,8 +478,6 @@ describe("PolymorphBattleground", function () {
 });
 
 
-
-
 describe("Test of finishRound() method", function() {
   const deployContracts = async () => {
     const [vrfCoordinator] = await ethers.getSigners();
@@ -404,7 +540,7 @@ describe("Test of finishRound() method", function() {
 
     participants = [];
     const participantsCount = await polymorphBattleground.maxPoolSize();
-    for (let i = 0; i < participantsCount; i++) {
+    for (let i = 0; i < participantsCount.toNumber(); i++) {
       participants.push(signers[i]);
     };
   });
@@ -500,7 +636,6 @@ describe("Test of finishRound() method", function() {
     expect(roundIndexAfter.toString()).to.be.eq(expectedRound.toString());
   });
 
-
   it("swapAndPopEntity() removes entity from the pool", async function () {
     await mintPolymorphs(participants);
 
@@ -511,4 +646,30 @@ describe("Test of finishRound() method", function() {
     const entityIdAfter = await polymorphBattleground.battlePools(roundIndex,index);
     expect(entityIdBefore.toString()).to.not.be.eq(entityIdAfter.toString());
   });
+
+  // TODO:: test the incentivise functionality of finishRound()
 });
+
+
+/*
+ Test cases:
+1. claimRewards() functionality
+  - player cannot claim rewards if its featured to fight in upcomming round
+  - player cannot claim if has no balance
+  - player balance gets reset after claim
+  - player address balance gets increased after claim
+2. saveRandomNumber() functionality
+  - saves the random number
+3. setStartRoundIncentive() functionality
+  - Only DAO can call it
+  - changes startRoundIncentive amount
+4. setFinishRoundIncentive() functionality
+  - Only DAO can call it
+  - changes finishRoundIncentive amount
+5. startRound() functionality
+  - cannot start round if there is an currently active round
+  - cannot start round if there are not enough participants in the pool
+
+  // TODO:: Think about
+  - how to test FundLink.sol functionality
+*/

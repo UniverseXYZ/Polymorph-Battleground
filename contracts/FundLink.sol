@@ -27,7 +27,7 @@ contract FundLink is ReentrancyGuard {
         rngChainlinkCost = _rngChainlinkCost;
     }
 
-    /// @notice converts it to LINK, so costs can be coverd for RNG generation
+    /// @notice gets LINK, so costs can be coverd for RNG generation
     function getLinkForRNGCosts() internal nonReentrant {
         uint256 ethAmount = address(this).balance;
         uint256 linkAmount = rngChainlinkCost;
