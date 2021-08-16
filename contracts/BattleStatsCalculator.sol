@@ -1,7 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "hardhat/console.sol";
 import { PolymorphGeneParser } from "./PolymorphGeneParser.sol";
 
 contract BattleStatsCalculator {
@@ -31,11 +30,12 @@ contract BattleStatsCalculator {
         uint256 dMax;
     }
 
+    address private daoAddress;
     mapping(uint8 => uint8) private itemsCountByTypeMap;
     mapping(uint256 => mapping(uint256 => Item)) private items; // GeneIndex => ItemIndex => Item
     uint256 private genePairsCount = 9; // To be configurable
 
-    constructor() {
+    constructor(address _daoAddress) {
         itemsCountByTypeMap[0] = 11;
         itemsCountByTypeMap[1] = 12;
         itemsCountByTypeMap[2] = 33;
@@ -45,6 +45,7 @@ contract BattleStatsCalculator {
         itemsCountByTypeMap[6] = 31;
         itemsCountByTypeMap[7] = 32;
         itemsCountByTypeMap[8] = 32;
+        daoAddress = _daoAddress;
     }
 
     function getStats(uint256 gene, uint256 skillType) public view returns (uint256, uint256) {
@@ -74,6 +75,8 @@ contract BattleStatsCalculator {
     /// @param _itemsArr uint256[][4] dMin
     /// @param _itemsArr uint256[][5] dMax
     function initItems(uint256[][] memory _itemsArr) public {
+        require(msg.sender == daoAddress, "Not called from the dao");
+
         for(uint256 index = 0; index < _itemsArr.length; index ++) {
             uint256[] memory i = _itemsArr[index];
             items[i[0]][i[1]] = Item(i[2], i[3], i[4], i[5]);

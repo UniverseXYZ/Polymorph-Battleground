@@ -245,33 +245,37 @@ const ITEMS2 = [
 
 // Initializer functions, could be overwriten in need
 const deployContracts = async () => {
-  const [vrfCoordinator] = await ethers.getSigners();
+  const [vrfCoordinator, dao] = await ethers.getSigners();
 
   const PolymorphsContract = await ethers.getContractFactory("PolymorphWithGeneChanger");
   const polymorphsContract = await PolymorphsContract.deploy();
   await polymorphsContract.deployed();
 
-  const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
-  const polymorphBattleground = await PolymorphBattleground.deploy(
+  const ADDRESSES = [
     polymorphsContract.address,
-    DAO_ADDRESS,
     UNISWAP_V3_ROUTER,
     LINK_ADDRESS,
     WETH_ADDRESS,
+    vrfCoordinator.address
+  ];
+
+  const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
+  const polymorphBattleground = await PolymorphBattleground.deploy(
+    ADDRESSES,
+    dao.address,
     DAO_FEE_BPS,
     OPERATIONAL_FEEBPS,
     RNG_CHAINLINK_COST,
     START_ROUND_INCETIVE,
     END_ROUND_INCETIVE,
-    vrfCoordinator.address
     );
   await polymorphBattleground.deployed();
 
-  const BattleStatsCalculator = await ethers.getContractFactory("BattleStatsCalculator");
-  const battleStatsCalculator = await BattleStatsCalculator.deploy();
-  await battleStatsCalculator.deployed();
+  // Init items
+  await polymorphBattleground.connect(dao).initItems(ITEMS1);
+  await polymorphBattleground.connect(dao).initItems(ITEMS2);
 
-  return { polymorphBattleground, polymorphsContract, battleStatsCalculator };
+  return { polymorphBattleground, polymorphsContract };
 };
 
 const mintPolymorphs = async (owners) => {
@@ -287,7 +291,7 @@ const mintPolymorphs = async (owners) => {
   await Promise.all(mintAndEnterPromises);
 }
 
-let polymorphBattleground, polymorphsContract, battleStatsCalculator, signers, participants;
+let polymorphBattleground, polymorphsContract, signers, participants;
 
 describe("Test of constructor()", function() {
   beforeEach(async function() {
@@ -295,16 +299,16 @@ describe("Test of constructor()", function() {
     const contracts = await loadFixture(deployContracts);
     polymorphBattleground = contracts.polymorphBattleground;
     polymorphsContract = contracts.polymorphsContract;
-    battleStatsCalculator = contracts.battleStatsCalculator;
   });
 
   it("All passed variables are cached into the contract", async function () {
+  const [vrfCoordinator, dao] = await ethers.getSigners();
 
     const polymorphContractAddress = await polymorphBattleground.polymorphsContractAddress();
     expect(polymorphContractAddress.toString()).to.be.eq(polymorphsContract.address.toString());
 
     const daoAddress = await polymorphBattleground.daoAddress();
-    expect(daoAddress.toString()).to.be.eq(DAO_ADDRESS);
+    expect(daoAddress.toString()).to.be.eq(dao.address);
 
     const router = await polymorphBattleground.uniswapV3Router();
     expect(router).to.be.eq(UNISWAP_V3_ROUTER);
@@ -338,11 +342,6 @@ describe("Tests for enterBattle() method: ", function () {
     const contracts = await loadFixture(deployContracts);
     polymorphBattleground = contracts.polymorphBattleground;
     polymorphsContract = contracts.polymorphsContract;
-    battleStatsCalculator = contracts.battleStatsCalculator;
-
-    // Init items
-    await battleStatsCalculator.initItems(ITEMS1);
-    await battleStatsCalculator.initItems(ITEMS2);
 
     //  Get signers
     signers = await hre.ethers.getSigners();
@@ -452,22 +451,14 @@ describe("Tests for enterBattle() method: ", function () {
   });
 
   it("Should calculate stats based on Gene", async function () {
-    const { battleStatsCalculator, polymorphsContract } = await loadFixture(deployContracts);
-
-    await battleStatsCalculator.initItems(ITEMS1);
-    await battleStatsCalculator.initItems(ITEMS2);
     const gene = await polymorphsContract.geneOf(1);
-    const [min, max] = await battleStatsCalculator.getStats(gene.toString(), 0);
+    const [min, max] = await polymorphBattleground.getStats(gene.toString(), 0);
 
     assert(min.toNumber() != 0, "Min stats should not be 0 !");
     assert(max.toString() != 0, "Max stats should not be 0 !");
   });
 
   it("Should enter the battle", async function () {
-    const { polymorphBattleground, polymorphsContract, battleStatsCalculator } = await loadFixture(deployContracts);
-
-    battleStatsCalculator.initItems(ITEMS1);
-    battleStatsCalculator.initItems(ITEMS2);
     const [signer] = await ethers.getSigners();
     await polymorphsContract.mint(signer.address, 2);
     await polymorphBattleground.enterBattle(2, 1, {value: ethers.utils.parseEther("1")});
@@ -481,12 +472,8 @@ describe("Tests for enterBattle() method: ", function () {
   });
 
   it("Should refund if overpay for entering a battle", async function () {
-    const { polymorphBattleground, polymorphsContract, battleStatsCalculator } = await loadFixture(deployContracts);
-
     const [signer] = await ethers.getSigners();
     // Every signer starts with 1000 ETH
-    await battleStatsCalculator.initItems(ITEMS1);
-    await battleStatsCalculator.initItems(ITEMS2);
     const sentEthAmount = 10;
     const amountBefore = await signer.getBalance();
     const parsedBalanceBefore = await ethers.utils.formatEther(amountBefore);
@@ -522,11 +509,6 @@ describe("Test of finishRound() method", function() {
     const contracts = await loadFixture(deployContracts);
     polymorphBattleground = contracts.polymorphBattleground;
     polymorphsContract = contracts.polymorphsContract;
-    battleStatsCalculator = contracts.battleStatsCalculator;
-
-    // Init items
-    await battleStatsCalculator.initItems(ITEMS1);
-    await battleStatsCalculator.initItems(ITEMS2);
 
     //  Get signers
     signers = await hre.ethers.getSigners();
@@ -647,11 +629,6 @@ describe("Test of claimRewards()", function() {
     const contracts = await loadFixture(deployContracts);
     polymorphBattleground = contracts.polymorphBattleground;
     polymorphsContract = contracts.polymorphsContract;
-    battleStatsCalculator = contracts.battleStatsCalculator;
-
-    // Init items
-    await battleStatsCalculator.initItems(ITEMS1);
-    await battleStatsCalculator.initItems(ITEMS2);
 
     //  Get signers
     signers = await hre.ethers.getSigners();
@@ -696,11 +673,6 @@ describe("Test of saveRandomNumber()", function() {
     const contracts = await loadFixture(deployContracts);
     polymorphBattleground = contracts.polymorphBattleground;
     polymorphsContract = contracts.polymorphsContract;
-    battleStatsCalculator = contracts.battleStatsCalculator;
-
-    // Init items
-    await battleStatsCalculator.initItems(ITEMS1);
-    await battleStatsCalculator.initItems(ITEMS2);
 
     //  Get signers
     signers = await hre.ethers.getSigners();
@@ -727,45 +699,11 @@ describe("Test of saveRandomNumber()", function() {
 });
 
 describe("Test of setStartRoundIncentive() and setFinishRoundIncentive()", function() {
-  const deployContracts = async () => {
-    const [vrfCoordinator, dao] = await ethers.getSigners();
-
-    const PolymorphsContract = await ethers.getContractFactory("PolymorphWithGeneChanger");
-    const polymorphsContract = await PolymorphsContract.deploy();
-    await polymorphsContract.deployed();
-
-    const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
-    const polymorphBattleground = await PolymorphBattleground.deploy(
-      polymorphsContract.address,
-      dao.address,
-      UNISWAP_V3_ROUTER,
-      LINK_ADDRESS,
-      WETH_ADDRESS,
-      DAO_FEE_BPS,
-      OPERATIONAL_FEEBPS,
-      RNG_CHAINLINK_COST,
-      START_ROUND_INCETIVE,
-      END_ROUND_INCETIVE,
-      vrfCoordinator.address
-      );
-    await polymorphBattleground.deployed();
-
-    const BattleStatsCalculator = await ethers.getContractFactory("BattleStatsCalculator");
-    const battleStatsCalculator = await BattleStatsCalculator.deploy();
-    await battleStatsCalculator.deployed();
-
-    return { polymorphBattleground, polymorphsContract, battleStatsCalculator };
-  };
   beforeEach(async function() {
     // Deploy contracts
     const contracts = await loadFixture(deployContracts);
     polymorphBattleground = contracts.polymorphBattleground;
     polymorphsContract = contracts.polymorphsContract;
-    battleStatsCalculator = contracts.battleStatsCalculator;
-
-    // Init items
-    await battleStatsCalculator.initItems(ITEMS1);
-    await battleStatsCalculator.initItems(ITEMS2);
 
     //  Get signers
     signers = await hre.ethers.getSigners();

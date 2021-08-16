@@ -66,29 +66,32 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         address claimer
     );
 
-    modifier onlyDAO() {
+    modifier onlyDAO {
         require(msg.sender == daoAddress, "Not called from the dao");
         _;
     }
 
+    /// @notice pass the addresses as array
+    /// @param addresses[0] _polymorphContractAddress
+    /// @param addresses[1] _uniswapV3Router
+    /// @param addresses[2] _linkAddress
+    /// @param addresses[3] _wethAddress
+    /// @param addresses[4] _vrfCoordinator
     constructor(
-        address _polymorphContractAddress,
+        address[] memory addresses,
         address payable _daoAddress,
-        address _uniswapV3Router,
-        address _linkAddress,
-        address _wethAddress,
         uint256 _daoFeeBps,
         uint256 _operationalFeeBps,
         uint256 _rngChainlinkCost,
         uint256 _startRoundIncetive,
-        uint256 _finishRoundIncetive,
-        address _vrfCoordinator
+        uint256 _finishRoundIncetive
         )
+        BattleStatsCalculator(_daoAddress)
         FeesCalculator(_daoFeeBps, _operationalFeeBps)
-        FundLink(_uniswapV3Router, _linkAddress, _wethAddress, _rngChainlinkCost)
-        RandomNumberConsumer(_vrfCoordinator)
+        FundLink(addresses[1], addresses[2], addresses[3], _rngChainlinkCost)
+        RandomNumberConsumer(addresses[4])
     {
-        polymorphsContractAddress = _polymorphContractAddress;
+        polymorphsContractAddress = addresses[0];
         daoAddress = _daoAddress;
         startRoundIncetive = _startRoundIncetive;
         finishRoundIncetive = _finishRoundIncetive;
