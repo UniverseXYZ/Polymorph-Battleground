@@ -263,6 +263,7 @@ const deployContracts = async () => {
   const polymorphBattleground = await PolymorphBattleground.deploy(
     ADDRESSES,
     dao.address,
+    WAGER,
     DAO_FEE_BPS,
     OPERATIONAL_FEEBPS,
     RNG_CHAINLINK_COST,

@@ -27,8 +27,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     uint256 public roundIndex; // The round be executed
     uint256 public battlePoolIndex; // Current battlePoolIndex to insert entities
     uint256 public maxPoolSize = 40;
-    uint256 public minPoolSize = 10; // There should be enough participants, in order to incentivise the callers of start/finish round methods
-    uint256 public wager = 100000000000000000; // 0,1
+    uint256 public minPoolSize = 10;
+    uint256 public wager;
     uint256 public randomNumber;
     uint256 public roundFees;
     uint256 public paidEthAmountForLinkSwap;
@@ -80,6 +80,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     constructor(
         address[] memory addresses,
         address payable _daoAddress,
+        uint256 _wager,
         uint256 _daoFeeBps,
         uint256 _operationalFeeBps,
         uint256 _rngChainlinkCost,
@@ -92,6 +93,7 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         RandomNumberConsumer(addresses[4])
     {
         polymorphsContractAddress = addresses[0];
+        wager = _wager;
         daoAddress = _daoAddress;
         startRoundIncetive = _startRoundIncetive;
         finishRoundIncetive = _finishRoundIncetive;
