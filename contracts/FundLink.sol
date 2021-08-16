@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./IUniswapV3Router.sol";
 
-contract FundLink is ReentrancyGuard {
+abstract contract FundLink is ReentrancyGuard {
     using SafeMath for uint256;
 
     address public linkAddress;

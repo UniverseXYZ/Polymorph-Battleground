@@ -2,7 +2,7 @@ pragma solidity ^0.8.0;
 
 import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
 
-contract RandomNumberConsumer is VRFConsumerBase {
+abstract contract RandomNumberConsumer is VRFConsumerBase {
     bytes32 internal keyHash;
     uint256 internal fee;
 
@@ -18,7 +18,7 @@ contract RandomNumberConsumer is VRFConsumerBase {
         VRFConsumerBase(
             _vrfCoordinator, // VRF Coordinator
             0x01BE23585060835E02B77ef475b0Cc51aA1e0709  // LINK Token
-        ) public
+        )
     {
         keyHash = 0x2ed0feb3e7fd2022120aa84fab1945545a9f2ffc9076fd6156fa96eaff4c1311;
         fee = 0.1 * 10 ** 18; // 0.1 LINK
