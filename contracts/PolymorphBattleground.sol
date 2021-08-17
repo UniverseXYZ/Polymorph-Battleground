@@ -30,8 +30,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     uint256 public minPoolSize = 10;
     uint256 public wager;
     uint256 public randomNumber;
-    uint256 public roundFees;
-    uint256 public paidEthAmountForLinkSwap;
+    uint256 public roundFees; // TODO:: rename roundFeesPerPerson or smth
+    uint256 public paidEthAmountForLinkSwap; // TODO:: rename
     uint256 public startRoundIncetive;
     uint256 public finishRoundIncetive;
 

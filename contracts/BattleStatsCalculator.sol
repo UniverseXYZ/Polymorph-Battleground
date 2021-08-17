@@ -1,5 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
+
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import { PolymorphGeneParser } from "./PolymorphGeneParser.sol";
 
@@ -28,6 +29,8 @@ contract BattleStatsCalculator {
         uint256 aMax;
         uint256 dMin;
         uint256 dMax;
+        uint256 genePos;
+        uint256 itemIndex;
     }
 
     address private daoAddress;
@@ -67,19 +70,19 @@ contract BattleStatsCalculator {
     }
 
     /// @notice initialize items mapping
-    /// @param _itemsArr uint256[][] array
-    /// @param _itemsArr uint256[][0] genePosition
-    /// @param _itemsArr uint256[][1] itemIndex
-    /// @param _itemsArr uint256[][2] aMin
-    /// @param _itemsArr uint256[][3] aMax
-    /// @param _itemsArr uint256[][4] dMin
-    /// @param _itemsArr uint256[][5] dMax
-    function initItems(uint256[][] memory _itemsArr) public {
+    /// @param _itemsArr Item[]
+    /// @param _itemsArr Item.genePosition
+    /// @param _itemsArr Item.itemIndex
+    /// @param _itemsArr Item.aMin
+    /// @param _itemsArr Item.aMax
+    /// @param _itemsArr Item.dMin
+    /// @param _itemsArr Item.dMax
+    function initItems(Item[]memory _itemsArr) public {
         require(msg.sender == daoAddress, "Not called from the dao");
 
         for(uint256 index = 0; index < _itemsArr.length; index ++) {
-            uint256[] memory i = _itemsArr[index];
-            items[i[0]][i[1]] = Item(i[2], i[3], i[4], i[5]);
+            Item memory i = _itemsArr[index];
+            items[i.genePos][i.itemIndex] = i;
         }
     }
 }
