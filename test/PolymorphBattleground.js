@@ -400,6 +400,12 @@ describe("Tests for enterBattle() method: ", function () {
     await expect(polymorphBattleground.enterBattle(2, 1, {value: ethers.utils.parseEther("1")})).revertedWith('You have already registered for the current battle pool');
   });
 
+  it("User cannot enter the battle pool with wrong Battle stance !", async function () {
+    const signer = signers[0];
+    await polymorphsContract.mint(signer.address, 2);
+    await expect(polymorphBattleground.enterBattle(2, 2, {value: ethers.utils.parseEther("1")})).revertedWith('Plase select an existing battle stance !');
+  });
+
   it("User should be the owner of the polymorph", async function () {
     const signer = signers[0];
     const signer1 = signers[1];

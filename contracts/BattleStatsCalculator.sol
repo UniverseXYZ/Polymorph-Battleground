@@ -52,6 +52,12 @@ contract BattleStatsCalculator {
     }
 
     function getStats(uint256 gene, uint256 skillType) public view returns (uint256, uint256) {
+        require(
+            skillType == uint(BattleStances.ATTACK) ||
+            skillType == uint(BattleStances.DEFENCE),
+             "Plase select an existing battle stance !"
+             );
+
         uint256[] memory genePairs = PolymorphGeneParser.splitGeneToPairs(gene, genePairsCount);
         uint256 min;
         uint256 max;
