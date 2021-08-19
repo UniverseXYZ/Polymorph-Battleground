@@ -23,6 +23,17 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         address owner;
     }
 
+    struct BattleStats {
+        address winnerAddress;
+        address loserAddress;
+        uint256 winnerId;
+        uint256 loserId;
+        uint256 statsFirst;
+        uint256 statsSecond;
+        uint256 firstRandomNumber;
+        uint256 secondRandomNumber;
+    }
+
     bool public inRound; // If the execution of a round has begun
     uint256 public roundIndex; // The round be executed
     uint256 public battlePoolIndex; // Current battlePoolIndex to insert entities
@@ -44,6 +55,13 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         uint256 polymorphId,
         uint256 skillType,
         address owner,
+        uint256 time,
+        uint256 minStats,
+        uint256 maxStats
+    );
+
+    event LogRoundStarted(
+        uint256 roundIndex,
         uint256 time
     );
 
@@ -55,10 +73,18 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     event LogPolymorphsBattled(
         uint256 firstPolymorphId,
         uint256 firstPolymorphStats,
+        uint256 firstPolymorphSkillType,
+        address firstPolymorphAddress,
+        uint256 firstPolymorphRandomNumber,
         uint256 secondPolymorphId,
         uint256 secondPolymorphStats,
-        address winner,
-        uint256 time
+        uint256 secondPolymorphSkillType,
+        address secondPolymorphAddress,
+        uint256 secondPolymorphRandomNumber,
+        uint256 winnerId,
+        uint256 loserId,
+        uint256 wager,
+        uint256 roundIndex
     );
 
     event LogRewardsClaimed(
@@ -151,13 +177,15 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
             polymorphId,
             skillType,
             entity.owner,
-            block.timestamp
+            block.timestamp,
+            min,
+            max
         );
     }
 
     /// @notice Calculates the stats score range of the polymorph based on its gene for example (50 - 75)
     /// @param polymorphId Id of the polymorph
-    function getStatsPoints(uint256 polymorphId, uint256 skillType) private view returns (uint256 min, uint256 max) {
+    function getStatsPoints(uint256 polymorphId, uint256 skillType) public view returns (uint256 min, uint256 max) {
         PolymorphWithGeneChanger polymorphsContract = PolymorphWithGeneChanger(polymorphsContractAddress);
         uint256 gene = polymorphsContract.geneOf(polymorphId);
         require(gene != 0, "Cannot calculate stats points for no Gene");
@@ -195,6 +223,8 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         address payable recipient = payable(msg.sender);
         (bool success, ) = recipient.call{value: callerIncetiveAmount}("");
         require(success, "Start round incetinve failed");
+
+        emit LogRoundStarted(roundIndex, block.timestamp);
     }
 
     /// @notice The actual battle calculation where the comparison happens
@@ -230,49 +260,67 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
             // Take random numbers for stats calculations
             uint256[] memory statsRandoms = expand(randoms[1], 2);
 
+            BattleStats memory stats;
+
             // Calculate stats
-            uint256 statsFirst = entity.statsMin + (statsRandoms[0] % (1 + (entity.statsMax - entity.statsMin)));
-            uint256 statsSecond = entity2.statsMin + (statsRandoms[1] % (1 + (entity2.statsMax - entity2.statsMin)));
+            stats.statsFirst = entity.statsMin + (statsRandoms[0] % (1 + (entity.statsMax - entity.statsMin)));
+            stats.statsSecond = entity2.statsMin + (statsRandoms[1] % (1 + (entity2.statsMax - entity2.statsMin)));
+            stats.firstRandomNumber = statsRandoms[0];
+            stats.secondRandomNumber = statsRandoms[1];
 
             // winner
-            address winner;
-            address loser;
-            if (statsFirst > statsSecond) {
-                winner = entity.owner;
-                loser = entity2.owner;
+            if (stats.statsFirst > stats.statsSecond) {
+                stats.winnerAddress = entity.owner;
+                stats.loserAddress = entity2.owner;
+                stats.winnerId = firstId;
+                stats.loserId = secondId;
             }
 
-            if (statsSecond > statsFirst) {
-                winner = entity2.owner;
-                loser = entity.owner;
+            if (stats.statsSecond > stats.statsFirst) {
+                stats.winnerAddress = entity2.owner;
+                stats.loserAddress = entity.owner;
+                stats.winnerId = secondId;
+                stats.loserId = firstId;
             }
 
             // Equal stats case, select the winner based on the random numbers used for forming the stats
-            if (statsFirst == statsSecond) {
+            if (stats.statsFirst == stats.statsSecond) {
                 if (statsRandoms[0] > statsRandoms[1]) {
-                    winner = entity.owner;
-                    loser = entity2.owner;
+                    stats.winnerAddress = entity.owner;
+                    stats.loserAddress = entity2.owner;
+                    stats.winnerId = firstId;
+                    stats.loserId = secondId;
                 } else {
-                    winner = entity2.owner;
-                    loser = entity.owner;
+                    stats.winnerAddress = entity2.owner;
+                    stats.loserAddress = entity.owner;
+                    stats.winnerId = secondId;
+                    stats.loserId = firstId;
                 }
             }
 
             // Substract the fees for participation in the game
-            playerBalances[winner] = playerBalances[winner].sub(roundFees);
-            playerBalances[loser] = playerBalances[loser].sub(roundFees);
+            playerBalances[stats.winnerAddress] = playerBalances[stats.winnerAddress].sub(roundFees);
+            playerBalances[stats.loserAddress] = playerBalances[stats.loserAddress].sub(roundFees);
             // Add the won wager to the winner, and substract it from the loser
             uint256 wagerAfterfees = wager.sub(roundFees);
-            playerBalances[winner] = playerBalances[winner].add(wagerAfterfees);
-            playerBalances[loser] = playerBalances[loser].sub(wagerAfterfees);
+            playerBalances[stats.winnerAddress] = playerBalances[stats.winnerAddress].add(wagerAfterfees);
+            playerBalances[stats.loserAddress] = playerBalances[stats.loserAddress].sub(wagerAfterfees);
 
             emit LogPolymorphsBattled(
                 entity.id,
-                statsFirst,
+                stats.statsFirst,
+                entity.skillType,
+                entity.owner,
+                stats.firstRandomNumber,
                 entity2.id,
-                statsSecond,
-                winner,
-                block.timestamp
+                stats.statsSecond,
+                entity2.skillType,
+                entity2.owner,
+                stats.secondRandomNumber,
+                stats.winnerId,
+                stats.loserId,
+                wager,
+                roundIndex
                 );
 
             // Update the last random result for that pool fight, so we will have a new one in the next cycle
