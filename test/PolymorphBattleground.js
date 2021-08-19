@@ -281,16 +281,20 @@ const deployContracts = async () => {
     vrfCoordinator.address
   ];
 
-  const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
-  const polymorphBattleground = await PolymorphBattleground.deploy(
-    ADDRESSES,
-    dao.address,
+  const FEES = [
     WAGER,
     DAO_FEE_BPS,
     OPERATIONAL_FEEBPS,
     RNG_CHAINLINK_COST,
     START_ROUND_INCETIVE,
-    END_ROUND_INCETIVE,
+    END_ROUND_INCETIVE
+  ];
+
+  const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
+  const polymorphBattleground = await PolymorphBattleground.deploy(
+    ADDRESSES,
+    FEES,
+    dao.address
     );
   await polymorphBattleground.deployed();
 
@@ -528,9 +532,6 @@ describe("Tests for enterBattle() method: ", function () {
     // TOTAL = 80100000000000000
     expect(fees.toString() === "80100000000000000"); // 0,0801 ETH
   });
-
-  // TODO:: use coverage hardhat
-  // TODO:: Write tests for RandomConsumberNumber.sol => https://github.com/alexroan/truffle-tests-tutorial
 });
 
 describe("Test of finishRound() method", function() {

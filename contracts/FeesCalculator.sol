@@ -9,9 +9,9 @@ contract FeesCalculator {
     uint256 public daoFeeBps;
     uint256 public operationalFeeBps;
 
-    constructor(uint256 _daoFeeBps, uint256 _operationalFeeBps) {
-        daoFeeBps = _daoFeeBps;
-        operationalFeeBps = _operationalFeeBps;
+    constructor(uint256[] memory fees) {
+        daoFeeBps = fees[1];
+        operationalFeeBps = fees[2];
     }
 
     /// @notice Calculates the Fees for pool participation

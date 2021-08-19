@@ -20,10 +20,10 @@ abstract contract FundLink is ReentrancyGuard {
         address initiator
     );
 
-    constructor(address _uniswapV3Router, address _linkAddress, address _wethAddress, uint256 _rngChainlinkCost) {
-        linkAddress = _linkAddress;
-        wethAddress = _wethAddress;
-        uniswapV3Router = IUniswapV3Router(_uniswapV3Router);
+    constructor(address[] memory addresses, uint256 _rngChainlinkCost) {
+        linkAddress = addresses[2];
+        wethAddress = addresses[3];
+        uniswapV3Router = IUniswapV3Router(addresses[1]);
         rngChainlinkCost = _rngChainlinkCost;
     }
 

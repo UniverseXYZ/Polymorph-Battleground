@@ -26,8 +26,6 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     struct BattleStats {
         address winnerAddress;
         address loserAddress;
-        uint256 winnerId;
-        uint256 loserId;
         uint256 statsFirst;
         uint256 statsSecond;
         uint256 firstRandomNumber;
@@ -81,8 +79,6 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
         uint256 secondPolymorphSkillType,
         address secondPolymorphAddress,
         uint256 secondPolymorphRandomNumber,
-        uint256 winnerId,
-        uint256 loserId,
         uint256 wager,
         uint256 roundIndex
     );
@@ -103,26 +99,27 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
     /// @param addresses[2] _linkAddress
     /// @param addresses[3] _wethAddress
     /// @param addresses[4] _vrfCoordinator
+    /// @param fees[][0] _wager
+    /// @param fees[][1] _daoFeeBps
+    /// @param fees[][2] _operationalFeeBps
+    /// @param fees[][3] _rngChainlinkCost
+    /// @param fees[][4] _startRoundIncetive
+    /// @param fees[][5] _finishRoundIncetive
     constructor(
         address[] memory addresses,
-        address payable _daoAddress,
-        uint256 _wager,
-        uint256 _daoFeeBps,
-        uint256 _operationalFeeBps,
-        uint256 _rngChainlinkCost,
-        uint256 _startRoundIncetive,
-        uint256 _finishRoundIncetive
+        uint256[] memory fees,
+        address payable _daoAddress
         )
         BattleStatsCalculator(_daoAddress)
-        FeesCalculator(_daoFeeBps, _operationalFeeBps)
-        FundLink(addresses[1], addresses[2], addresses[3], _rngChainlinkCost)
+        FeesCalculator(fees)
+        FundLink(addresses, fees[3])
         RandomNumberConsumer(addresses[4])
     {
         polymorphsContractAddress = addresses[0];
-        wager = _wager;
+        wager = fees[0];
         daoAddress = _daoAddress;
-        startRoundIncetive = _startRoundIncetive;
-        finishRoundIncetive = _finishRoundIncetive;
+        startRoundIncetive = fees[4];
+        finishRoundIncetive = fees[5];
     }
 
     /// @notice The user enters a battle. The function checks whether the user is owner of the morph. Also the wager is sent to the contract and the user's morph enters the pool.
@@ -272,15 +269,11 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
             if (stats.statsFirst > stats.statsSecond) {
                 stats.winnerAddress = entity.owner;
                 stats.loserAddress = entity2.owner;
-                stats.winnerId = firstId;
-                stats.loserId = secondId;
             }
 
             if (stats.statsSecond > stats.statsFirst) {
                 stats.winnerAddress = entity2.owner;
                 stats.loserAddress = entity.owner;
-                stats.winnerId = secondId;
-                stats.loserId = firstId;
             }
 
             // Equal stats case, select the winner based on the random numbers used for forming the stats
@@ -288,13 +281,9 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
                 if (statsRandoms[0] > statsRandoms[1]) {
                     stats.winnerAddress = entity.owner;
                     stats.loserAddress = entity2.owner;
-                    stats.winnerId = firstId;
-                    stats.loserId = secondId;
                 } else {
                     stats.winnerAddress = entity2.owner;
                     stats.loserAddress = entity.owner;
-                    stats.winnerId = secondId;
-                    stats.loserId = firstId;
                 }
             }
 
@@ -317,8 +306,6 @@ contract PolymorphBattleground is BattleStatsCalculator, FeesCalculator, RandomN
                 entity2.skillType,
                 entity2.owner,
                 stats.secondRandomNumber,
-                stats.winnerId,
-                stats.loserId,
                 wager,
                 roundIndex
                 );
