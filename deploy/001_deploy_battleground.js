@@ -30,7 +30,7 @@ module.exports = async function () {
     // const DAO_ADDRESS = "0x5012A9a26866Bd7897a71Dd4fb7a65e6FFDD18f2"; // TODO:: Put actual DAO address
     // const WAGER = "100000000000000000"; // 0.1
     // const DAO_FEE_BPS = 1000;
-    // const OPERATIONAL_FEEBPS = 1000;
+    // const OPERATIONAL_FEE_BPS = 1000;
     // const RNG_CHAINLINK_COST = "100000000000000000";
     // const START_ROUND_INCETIVE = "5000000000000000"; // 0,005 ETH
     // const END_ROUND_INCETIVE = "10000000000000000"; // 0.01
@@ -294,16 +294,20 @@ module.exports = async function () {
         VRF_COORDINATOR_ADDRESS
       ];
 
-      const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
-      const polymorphBattleground = await PolymorphBattleground.deploy(
-        ADDRESSES,
-        DAO_ADDRESS,
+      const FEES = [
         WAGER,
         DAO_FEE_BPS,
         OPERATIONAL_FEE_BPS,
         RNG_CHAINLINK_COST,
         START_ROUND_INCETIVE,
-        END_ROUND_INCETIVE,
+        END_ROUND_INCETIVE
+      ];
+
+      const PolymorphBattleground = await ethers.getContractFactory("PolymorphBattleground");
+      const polymorphBattleground = await PolymorphBattleground.deploy(
+        ADDRESSES,
+        FEES,
+        DAO_ADDRESS
       );
     await polymorphBattleground.deployed();
 
@@ -321,7 +325,7 @@ module.exports = async function () {
     console.log("PolymorphBattleground deployed to:", polymorphBattleground.address);
 
     } else {
-      log("PolymorphBattleground already deployed");
+      console.log("PolymorphBattleground already deployed");
     }
   }
 };
