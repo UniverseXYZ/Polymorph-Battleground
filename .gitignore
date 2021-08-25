@@ -14,4 +14,3 @@ artifacts
 .vscode
 .solhint.json
 .prettierrc
-arguments.js

@@ -1,3 +1,4 @@
+require('dotenvrc');
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-etherscan");
 require("solidity-coverage");
@@ -51,6 +52,10 @@ module.exports = {
       accounts: [process.env.PRIVATE_KEY],
     },
     hardhat: {
+      gas: 15000000,
+      blockGasLimit: 15000000,
+      allowUnlimitedContractSize: true,
+      timeout: 1800000,
       accounts: {
         count: 100,
       },
@@ -67,7 +72,7 @@ module.exports = {
   gasReporter: {
     currency: "USD",
     gasPrice: 1,
-    enabled: process.env.REPORT_GAS == "true" ? true : false,
-    coinmarketcap: process.env.CMC_API_KEY,
+    enabled: true,
+    // coinmarketcap: process.env.CMC_API_KEY,
   },
 };
